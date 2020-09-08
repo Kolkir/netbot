@@ -17,17 +17,17 @@ impl GetCameraListMsg {
     }
 }
 
-impl<'a> Message<'a> for GetCameraListMsg {
+impl<'a> Message for GetCameraListMsg {
     fn id(&self) -> u8 {
         return self.id;
     }
 }
 
-impl<'a> SendMessage<'a> for GetCameraListMsg {
-    fn size(&self) -> Option<u32> {
-        return Some(1);
+impl<'a> SendMessage for GetCameraListMsg {
+    fn size(&self) -> u32 {
+        return 1;
     }
-    fn to_bytes(&'a mut self) -> Option<&'a [u8]> {
+    fn to_bytes(&mut self) -> Option<&[u8]> {
         return Some(&self.data);
     }
 }
@@ -48,13 +48,13 @@ impl RecvCameraListMsg {
     }
 }
 
-impl<'a> Message<'a> for RecvCameraListMsg {
+impl Message for RecvCameraListMsg {
     fn id(&self) -> u8 {
         return self.id;
     }
 }
 
-impl<'a> RecvMessage<'a> for RecvCameraListMsg {
+impl RecvMessage for RecvCameraListMsg {
     fn from_bytes(&mut self, buf: &[u8]) {
         self.camera_list.resize(buf.len(), 0);
         for (i, cam_id) in buf.iter().enumerate() {

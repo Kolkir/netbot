@@ -3,40 +3,32 @@
 #[macro_use]
 extern crate slice_as_array;
 
-mod message;
-use message::{MessageId, RecvMessage, SendMessage};
-
 mod camera_msg;
-use camera_msg::{GetCameraListMsg, RecvCameraListMsg};
-
 mod image_msg;
-use image_msg::{CaptureImageMsg, RecvImageMsg};
+mod message;
+mod server;
+use server::Server;
 
 use std::error::Error;
-use std::io::{stdin, stdout, BufRead, Read, Write};
-use std::net::{Ipv4Addr, SocketAddrV4, TcpListener, TcpStream};
+use std::io::{stdin, stdout, BufRead, Write};
+use std::net::Ipv4Addr;
+
+use camera_msg::{GetCameraListMsg, RecvCameraListMsg};
+use image_msg::{CaptureImageMsg, RecvImageMsg};
+use message::{HelloMsg, Message, MessageId};
 
 extern crate opencv;
 use opencv::{highgui, prelude::*};
 
-fn capture_image(tcp_stream: &mut TcpStream) -> opencv::Result<(), Box<dyn Error>> {
+fn capture_image(server: &mut Server) -> opencv::Result<(), Box<dyn Error>> {
     let mut get_msg = CaptureImageMsg::new();
     get_msg.camera_id = 0;
     get_msg.frame_width = 640;
     get_msg.frame_height = 480;
-    tcp_stream.write(get_msg.to_bytes().unwrap())?;
+    server.send(Box::new(get_msg))?;
+
     let mut recv_msg = RecvImageMsg::new();
-    let mut id: [u8; 1] = [0; 1];
-    tcp_stream.read(&mut id)?;
-    assert_eq!(id[0], MessageId::RecvImage as u8);
-    let mut size: [u8; 4] = [0; 4];
-    tcp_stream.read(&mut size)?;
-    let msg_size = u32::from_be_bytes(size);
-    println!("RecvImageMsg size = {}", msg_size);
-    let mut data: Vec<u8> = Vec::new();
-    data.resize(msg_size as usize, 0);
-    tcp_stream.read_exact(&mut data)?;
-    recv_msg.from_bytes(&data);
+    server.recv(&mut recv_msg)?;
 
     println!(
         "Recv image : {0} x {1} x {2}",
@@ -56,17 +48,11 @@ fn capture_image(tcp_stream: &mut TcpStream) -> opencv::Result<(), Box<dyn Error
     Ok(())
 }
 
-fn get_camera_list(tcp_stream: &mut TcpStream) -> Result<(), Box<dyn Error>> {
-    let mut get_msg = GetCameraListMsg::new();
-    tcp_stream.write(get_msg.to_bytes().unwrap())?;
+pub fn get_camera_list(server: &mut Server) -> Result<(), Box<dyn Error>> {
+    let get_msg = GetCameraListMsg::new();
+    server.send(Box::new(get_msg))?;
     let mut recv_msg = RecvCameraListMsg::new();
-    let mut id_size: [u8; 2] = [0; 2];
-    tcp_stream.read(&mut id_size)?;
-    assert_eq!(id_size[0], MessageId::RecvCameraList as u8);
-    let mut data: Vec<u8> = Vec::new();
-    data.resize(id_size[1] as usize, 0);
-    tcp_stream.read(&mut data)?;
-    recv_msg.from_bytes(&data);
+    server.recv(&mut recv_msg)?;
     println!("Camera list {:?}", recv_msg);
     Ok(())
 }
@@ -80,44 +66,41 @@ fn print_commands() -> Result<(), std::io::Error> {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let loopback = Ipv4Addr::new(127, 0, 0, 1);
-    let socket = SocketAddrV4::new(loopback, 8080);
-    let listener = TcpListener::bind(socket)?;
-    let port = listener.local_addr()?;
-    println!("Listening on {}, access this port to end the program", port);
-    let (mut tcp_stream, addr) = listener.accept()?; //block  until requested
-    println!("Connection received! {:?}", addr);
+    let addr = Ipv4Addr::new(127, 0, 0, 1);
+    let port = 8080;
+    let mut server = Server::new(addr, port)?;
+    server.wait_client()?;
     // handshake
-    let mut data = [0; 1];
-    let _ = tcp_stream.read(&mut data);
-    if data[0] == 1 {
-        tcp_stream.write(&data)?;
-        println!("Handshake completed");
-        print_commands()?;
-        let stdin = stdin();
-        for line in stdin.lock().lines() {
-            print_commands()?;
-            match line {
-                Ok(text) => {
-                    let trimmed = text.trim();
-                    match trimmed.parse::<u32>() {
-                        Ok(i) => {
-                            println!("your input: {}", i);
-                            match i {
-                                1 => get_camera_list(&mut tcp_stream)?,
-                                2 => capture_image(&mut tcp_stream)?,
-                                3 => return Ok(()),
-                                _ => println!("Incorrect command"),
-                            }
-                        }
-                        Err(..) => println!("this was not an integer"),
-                    };
-                }
-                Err(err) => println!("Failed to read an input {:?}", err),
-            };
-        }
+    let mut hello_msg = HelloMsg {};
+    server.recv(&mut hello_msg)?;
+    if hello_msg.id() == MessageId::Hello as u8 {
+        server.send(Box::new(HelloMsg {}))?;
     } else {
-        println!("Handshake failed");
+        panic!("Handshake failed!");
+    }
+    println!("Handshake completed");
+    print_commands()?;
+    let stdin = stdin();
+    for line in stdin.lock().lines() {
+        print_commands()?;
+        match line {
+            Ok(text) => {
+                let trimmed = text.trim();
+                match trimmed.parse::<u32>() {
+                    Ok(i) => {
+                        println!("your input: {}", i);
+                        match i {
+                            1 => get_camera_list(&mut server)?,
+                            2 => capture_image(&mut server)?,
+                            3 => return Ok(()),
+                            _ => println!("Incorrect command"),
+                        }
+                    }
+                    Err(..) => println!("this was not an integer"),
+                };
+            }
+            Err(err) => println!("Failed to read an input {:?}", err),
+        };
     }
     Ok(())
 }

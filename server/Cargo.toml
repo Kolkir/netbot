@@ -1,5 +1,5 @@
 [package]
-name = "rust"
+name = "server"
 version = "0.1.0"
 authors = ["Kirill Kolodiazhnyi <rotate@ukr.net>"]
 edition = "2018"
@@ -9,3 +9,4 @@ edition = "2018"
 [dependencies]
 opencv = {version = "0.45", features = ["contrib"]}
 slice_as_array = {version = "1.1.0"}
+iui = {version = "0.3"}

@@ -4,17 +4,50 @@ pub enum MessageId {
     RecvImage = 3,
     GetCameraList = 4,
     RecvCameraList = 5,
+    Unknown,
 }
-
-pub trait Message<'a> {
+impl From<u8> for MessageId {
+    fn from(orig: u8) -> Self {
+        match orig {
+            1 => return MessageId::Hello,
+            2 => return MessageId::CaptureImage,
+            3 => return MessageId::RecvImage,
+            4 => return MessageId::GetCameraList,
+            5 => return MessageId::RecvCameraList,
+            _ => return MessageId::Unknown,
+        };
+    }
+}
+pub trait Message {
     fn id(&self) -> u8;
 }
 
-pub trait SendMessage<'a>: Message<'a> {
-    fn size(&self) -> Option<u32>;
-    fn to_bytes(&'a mut self) -> Option<&'a [u8]>;
+pub trait SendMessage: Message {
+    fn size(&self) -> u32;
+    fn to_bytes(&mut self) -> Option<&[u8]>;
 }
 
-pub trait RecvMessage<'a>: Message<'a> {
+pub trait RecvMessage: Message {
     fn from_bytes(&mut self, _buf: &[u8]) {}
+}
+
+pub struct HelloMsg {}
+
+impl Message for HelloMsg {
+    fn id(&self) -> u8 {
+        return MessageId::Hello as u8;
+    }
+}
+
+impl RecvMessage for HelloMsg {
+    fn from_bytes(&mut self, _buf: &[u8]) {}
+}
+
+impl SendMessage for HelloMsg {
+    fn size(&self) -> u32 {
+        return 0;
+    }
+    fn to_bytes(&mut self) -> Option<&[u8]> {
+        None
+    }
 }

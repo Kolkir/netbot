@@ -23,17 +23,17 @@ impl CaptureImageMsg {
     }
 }
 
-impl<'a> Message<'a> for CaptureImageMsg {
+impl<'a> Message for CaptureImageMsg {
     fn id(&self) -> u8 {
         return self.id;
     }
 }
 
-impl<'a> SendMessage<'a> for CaptureImageMsg {
-    fn size(&self) -> Option<u32> {
-        return Some(1 + 1 + 2 + 2);
+impl<'a> SendMessage for CaptureImageMsg {
+    fn size(&self) -> u32 {
+        return 1 + 1 + 2 + 2;
     }
-    fn to_bytes(&'a mut self) -> Option<&'a [u8]> {
+    fn to_bytes(&mut self) -> Option<&[u8]> {
         self.data.push(self.id);
         self.data.push(self.camera_id);
         let width_bytes = self.frame_width.to_be_bytes();
@@ -66,13 +66,13 @@ impl RecvImageMsg {
     }
 }
 
-impl<'a> Message<'a> for RecvImageMsg {
+impl<'a> Message for RecvImageMsg {
     fn id(&self) -> u8 {
         return self.id;
     }
 }
 
-impl<'a> RecvMessage<'a> for RecvImageMsg {
+impl RecvMessage for RecvImageMsg {
     fn from_bytes(&mut self, _buf: &[u8]) {
         {
             let tmp = slice_as_array!(&_buf[0..2], [u8; 2]).expect("RecvImageMsg wrong data");
