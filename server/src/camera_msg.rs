@@ -56,8 +56,9 @@ impl Message for RecvCameraListMsg {
 
 impl RecvMessage for RecvCameraListMsg {
     fn from_bytes(&mut self, buf: &[u8]) {
-        self.camera_list.resize(buf.len(), 0);
-        for (i, cam_id) in buf.iter().enumerate() {
+        let size = buf[0] as usize;
+        self.camera_list.resize(size, 0);
+        for (i, cam_id) in buf[1..].iter().enumerate() {
             self.camera_list[i] = *cam_id;
         }
     }

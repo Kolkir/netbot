@@ -31,10 +31,10 @@ impl<'a> Message for CaptureImageMsg {
 
 impl<'a> SendMessage for CaptureImageMsg {
     fn size(&self) -> u32 {
-        return 1 + 1 + 2 + 2;
+        return 1 + 2 + 2;
     }
+
     fn to_bytes(&mut self) -> Option<&[u8]> {
-        self.data.push(self.id);
         self.data.push(self.camera_id);
         let width_bytes = self.frame_width.to_be_bytes();
         self.data.extend_from_slice(&width_bytes);
