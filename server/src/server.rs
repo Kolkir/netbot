@@ -1,8 +1,10 @@
+use std::cell::RefCell;
 use std::error::Error;
 use std::fmt;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
+use std::rc::Rc;
 
 use super::message;
 use message::{RecvMessage, SendMessage};
@@ -18,10 +20,11 @@ impl fmt::Display for ServerErrors {
 }
 impl Error for ServerErrors {}
 
+#[derive(Clone)]
 pub struct Server {
     socket: SocketAddrV4,
-    listener: TcpListener,
-    tcp_stream: Option<TcpStream>,
+    listener: Rc<TcpListener>,
+    tcp_stream: Rc<RefCell<Option<TcpStream>>>,
 }
 
 impl Server {
@@ -29,23 +32,24 @@ impl Server {
         let socket = SocketAddrV4::new(addr, port);
         Ok(Server {
             socket: socket,
-            listener: TcpListener::bind(socket)?,
-            tcp_stream: None,
+            listener: Rc::new(TcpListener::bind(socket)?),
+            tcp_stream: Rc::new(RefCell::new(None)),
         })
     }
     pub fn wait_client(&mut self) -> Result<(), Box<dyn Error>> {
         let port = self.listener.local_addr()?;
         println!("Listening on {}, access this port from a client", port);
         let (tcp_stream, client_addr) = self.listener.accept()?; //block  until requested
-        self.tcp_stream = Some(tcp_stream);
+        self.tcp_stream = Rc::new(RefCell::new(Some(tcp_stream)));
         println!("Connection received! {:?}", client_addr);
         Ok(())
     }
 
     pub fn send(&mut self, msg: Box<dyn SendMessage>) -> Result<(), Box<dyn Error>> {
         let mut msg = msg;
-        match &mut self.tcp_stream {
-            Some(stream) => {
+        let stream = self.tcp_stream.borrow();
+        match stream.as_ref() {
+            Some(mut stream) => {
                 let mut id_size: [u8; 5] = [0; 5];
                 id_size[0] = msg.id();
                 let size_bytes = msg.size().to_be_bytes();
@@ -65,7 +69,8 @@ impl Server {
     }
 
     pub fn recv<T: RecvMessage>(&mut self, msg: &mut T) -> Result<(), Box<dyn Error>> {
-        match &mut self.tcp_stream {
+        let mut stream = self.tcp_stream.borrow_mut();
+        match stream.as_mut() {
             Some(stream) => {
                 let mut id_size: [u8; 5] = [0; 5];
                 stream.read_exact(&mut id_size)?;

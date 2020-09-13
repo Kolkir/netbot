@@ -3,6 +3,10 @@
 #[macro_use]
 extern crate slice_as_array;
 
+mod cmdui;
+mod ui;
+use cmdui::CmdUi;
+use ui::UI;
 mod camera_msg;
 mod image_msg;
 mod message;
@@ -10,21 +14,22 @@ mod server;
 use server::Server;
 
 use std::error::Error;
-use std::io::{stdin, stdout, BufRead, Write};
 use std::net::Ipv4Addr;
 
 use camera_msg::{GetCameraListMsg, RecvCameraListMsg};
 use image_msg::{CaptureImageMsg, RecvImageMsg};
 use message::{HelloMsg, Message, MessageId};
 
-extern crate opencv;
-use opencv::{highgui, prelude::*};
-
-fn capture_image(server: &mut Server) -> opencv::Result<(), Box<dyn Error>> {
+fn capture_image<'a>(
+    server: &mut Server,
+    camera_id: u8,
+    frame_width: u16,
+    frame_height: u16,
+) -> opencv::Result<Vec<u8>, Box<dyn Error>> {
     let mut get_msg = CaptureImageMsg::new();
-    get_msg.camera_id = 0;
-    get_msg.frame_width = 640;
-    get_msg.frame_height = 480;
+    get_msg.camera_id = camera_id;
+    get_msg.frame_width = frame_width;
+    get_msg.frame_height = frame_height;
     server.send(Box::new(get_msg))?;
 
     let mut recv_msg = RecvImageMsg::new();
@@ -35,34 +40,15 @@ fn capture_image(server: &mut Server) -> opencv::Result<(), Box<dyn Error>> {
         recv_msg.channels, recv_msg.frame_width, recv_msg.frame_height
     );
 
-    let mut frame = Mat::from_exact_iter(recv_msg.data.into_iter())?;
-    frame = frame.reshape(3, recv_msg.frame_height as i32)?;
-
-    let window = "Captured image";
-    highgui::named_window(window, 1)?;
-    if frame.size()?.width > 0 {
-        highgui::imshow(window, &mut frame)?;
-        highgui::wait_key(0)?;
-        highgui::destroy_all_windows()?;
-    }
-    Ok(())
+    Ok(recv_msg.data)
 }
 
-pub fn get_camera_list(server: &mut Server) -> Result<(), Box<dyn Error>> {
+pub fn get_camera_list(server: &mut Server) -> Result<Vec<u8>, Box<dyn Error>> {
     let get_msg = GetCameraListMsg::new();
     server.send(Box::new(get_msg))?;
     let mut recv_msg = RecvCameraListMsg::new();
     server.recv(&mut recv_msg)?;
-    println!("Camera list {:?}", recv_msg);
-    Ok(())
-}
-
-fn print_commands() -> Result<(), std::io::Error> {
-    println!(
-        "Press [1] for getting a camera list\nPress [2] for the image capture\nPress [3] to exit\n"
-    );
-    stdout().flush()?;
-    Ok(())
+    Ok(recv_msg.camera_list)
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -74,33 +60,27 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut hello_msg = HelloMsg {};
     server.recv(&mut hello_msg)?;
     if hello_msg.id() == MessageId::Hello as u8 {
+        println!("Handshaking started");
         server.send(Box::new(HelloMsg {}))?;
     } else {
         panic!("Handshake failed!");
     }
     println!("Handshake completed");
-    print_commands()?;
-    let stdin = stdin();
-    for line in stdin.lock().lines() {
-        print_commands()?;
-        match line {
-            Ok(text) => {
-                let trimmed = text.trim();
-                match trimmed.parse::<u32>() {
-                    Ok(i) => {
-                        println!("your input: {}", i);
-                        match i {
-                            1 => get_camera_list(&mut server)?,
-                            2 => capture_image(&mut server)?,
-                            3 => return Ok(()),
-                            _ => println!("Incorrect command"),
-                        }
-                    }
-                    Err(..) => println!("this was not an integer"),
-                };
-            }
-            Err(err) => println!("Failed to read an input {:?}", err),
-        };
-    }
-    Ok(())
+    let mut ui: Box<dyn UI> = Box::new(CmdUi::new());
+
+    let srv1 = server.clone();
+    let capture_img = move |camera_id, frame_width, frame_height| {
+        let mut srv = srv1.clone();
+        capture_image(&mut srv, camera_id, frame_width, frame_height)
+    };
+    ui.set_capture_img_fn(Box::new(capture_img));
+
+    let srv2 = server.clone();
+    let get_cam_list = move || {
+        let mut srv = srv2.clone();
+        get_camera_list(&mut srv)
+    };
+    ui.set_get_camera_list_fn(Box::new(get_cam_list));
+
+    ui.run()
 }
