@@ -48,11 +48,13 @@ def capture_image(camera_id, frame_width, frame_height):
     if cam.isOpened():
         cam.set(cv2.CAP_PROP_FRAME_WIDTH, frame_width)
         cam.set(cv2.CAP_PROP_FRAME_HEIGHT, frame_height)
+        cam.set(cv2.CAP_PROP_BACKLIGHT, 0)
         is_captured, frame = cam.read()
         if is_captured:
             print("Frame was captured: width {} height {}".format(
                 frame.shape[1], frame.shape[0]))
-            return frame
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            return frame_rgb
         else:
             print('Failed to capture an image with width={} and height={}'.format(
                 frame_width, frame_height))
