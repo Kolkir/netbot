@@ -3,10 +3,12 @@
 #[macro_use]
 extern crate slice_as_array;
 
-mod cmdui;
+// mod cmdui;
 mod ui;
-use cmdui::CmdUi;
+mod windowui;
+// use cmdui::CmdUi;
 use ui::UI;
+use windowui::WindowUi;
 mod camera_msg;
 mod image_msg;
 mod message;
@@ -66,7 +68,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         panic!("Handshake failed!");
     }
     println!("Handshake completed");
-    let mut ui: Box<dyn UI> = Box::new(CmdUi::new());
+    // let mut ui: Box<dyn UI> = Box::new(CmdUi::new());
+    let mut ui: Box<dyn UI> = Box::new(WindowUi::new());
 
     let srv1 = server.clone();
     let capture_img = move |camera_id, frame_width, frame_height| {
