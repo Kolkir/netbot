@@ -7,6 +7,7 @@ class MessageId(IntEnum):
     SEND_IMAGE = 3
     GET_CAMERA_LIST = 4
     SEND_CAMERA_LIST = 5
+    MOVE = 6
 
 
 class Message:

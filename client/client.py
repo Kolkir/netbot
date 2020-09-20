@@ -45,7 +45,8 @@ class Client:
                     msg = self.recv_msg(s)
                     print("Got msg_id {}".format(msg.id()))
                     response = self.process_message(msg)
-                    self.send_msg(s, response)
+                    if response:
+                        self.send_msg(s, response)
                 print('Connection closed')
             else:
                 print('Handshake failed, msg_id={}'.format(hello_msg.id()))

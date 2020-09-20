@@ -4,6 +4,7 @@ pub enum MessageId {
     RecvImage = 3,
     GetCameraList = 4,
     RecvCameraList = 5,
+    Move = 6,
     Unknown,
 }
 impl From<u8> for MessageId {
@@ -14,6 +15,7 @@ impl From<u8> for MessageId {
             3 => return MessageId::RecvImage,
             4 => return MessageId::GetCameraList,
             5 => return MessageId::RecvCameraList,
+            6 => return MessageId::Move,
             _ => return MessageId::Unknown,
         };
     }

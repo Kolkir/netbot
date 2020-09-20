@@ -5,6 +5,7 @@ from client import Client
 from message import MessageId, HelloMsg
 from camera_msg import *
 from image_msg import *
+from move_msg import *
 
 
 def get_msg_obj(msg_id):
@@ -13,7 +14,8 @@ def get_msg_obj(msg_id):
         MessageId.SEND_IMAGE: SendImageMsg(),
         MessageId.CAPTURE_IMAGE: CaptureImageMsg(),
         MessageId.GET_CAMERA_LIST: GetCameraListMsg(),
-        MessageId.SEND_CAMERA_LIST: SendCameraListMsg()
+        MessageId.SEND_CAMERA_LIST: SendCameraListMsg(),
+        MessageId.MOVE: MoveMsg(),
     }.get(msg_id)
     if not result:
         print('Unknown msg_id {}'.format(msg_id))
@@ -80,11 +82,17 @@ def process_get_camera_list(msg):
     return response
 
 
+def process_move(msg):
+    print("Moving left {}:{} right {}:{}".format(
+        msg.left_speed, msg.left_dir, msg.right_speed, msg.right_dir))
+
+
 def process_message(msg):
     print("Processing msg id : {}".format(msg.id()))
     result = {
         MessageId.CAPTURE_IMAGE: process_capture_image,
         MessageId.GET_CAMERA_LIST: process_get_camera_list,
+        MessageId.MOVE: process_move,
     }.get(msg.id())(msg)
     return result
 

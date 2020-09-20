@@ -12,6 +12,7 @@ use windowui::WindowUi;
 mod camera_msg;
 mod image_msg;
 mod message;
+mod move_msg;
 mod server;
 use server::Server;
 
@@ -21,6 +22,7 @@ use std::net::Ipv4Addr;
 use camera_msg::{GetCameraListMsg, RecvCameraListMsg};
 use image_msg::{CaptureImageMsg, RecvImageMsg};
 use message::{HelloMsg, Message, MessageId};
+use move_msg::MoveMsg;
 
 fn capture_image<'a>(
     server: &mut Server,
@@ -51,6 +53,22 @@ pub fn get_camera_list(server: &mut Server) -> Result<Vec<u8>, Box<dyn Error>> {
     let mut recv_msg = RecvCameraListMsg::new();
     server.recv(&mut recv_msg)?;
     Ok(recv_msg.camera_list)
+}
+
+pub fn move_bot(
+    server: &mut Server,
+    left_speed: u8,
+    left_dir: u8,
+    right_speed: u8,
+    right_dir: u8,
+) -> Result<(), Box<dyn Error>> {
+    let mut move_msg = MoveMsg::new();
+    move_msg.left_speed = left_speed;
+    move_msg.left_dir = left_dir;
+    move_msg.right_speed = right_speed;
+    move_msg.right_dir = right_dir;
+    server.send(Box::new(move_msg))?;
+    Ok(())
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -85,5 +103,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     ui.set_get_camera_list_fn(Box::new(get_cam_list));
 
+    let srv3 = server.clone();
+    let move_bot_fn = move |left_speed, left_dir, right_speed, right_dir| {
+        let mut srv = srv3.clone();
+        move_bot(&mut srv, left_speed, left_dir, right_speed, right_dir)
+    };
+    ui.set_move_fn(Box::new(move_bot_fn));
     ui.run()
 }
