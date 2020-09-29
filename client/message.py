@@ -8,6 +8,8 @@ class MessageId(IntEnum):
     GET_CAMERA_LIST = 4
     SEND_CAMERA_LIST = 5
     MOVE = 6
+    GET_CAMERA_PROP = 7
+    SEND_CAMERA_PROP = 8
 
 
 class Message:
