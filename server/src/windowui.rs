@@ -7,10 +7,10 @@ use std::error::Error;
 use std::fmt;
 use std::rc::Rc;
 use ui::UI as LocalUI;
-use ui::{CaptureImageFn, GetCameraListFn, MoveFn};
+use ui::{CaptureImageFn, GetCameraListFn, GetCameraPropFn, MoveFn};
 
-// extern crate opencv;
-// use opencv::{highgui, prelude::*};
+extern crate opencv;
+use opencv::{core, imgproc, prelude::*};
 
 #[derive(Debug)]
 enum UiErrors {
@@ -29,11 +29,13 @@ pub struct WindowUi {
     get_camera_list: Rc<Option<GetCameraListFn>>,
     capture_image: Rc<Option<CaptureImageFn>>,
     move_fn: Rc<Option<MoveFn>>,
+    get_camera_prop: Rc<Option<GetCameraPropFn>>,
     camera_list: Vec<u8>,
     image_data: HashMap<u8, Vec<u8>>,
     image_frames: HashMap<u8, Frame>,
-    frame_width: u16,
-    frame_height: u16,
+    image_res: HashMap<u8, (u16, u16)>,
+    ui_frame_width: i32,
+    ui_frame_height: i32,
     move_speed: u8,
 }
 
@@ -47,22 +49,38 @@ impl LocalUI for WindowUi {
     fn set_move_fn(&mut self, move_fn: MoveFn) {
         self.move_fn = Rc::new(Some(move_fn));
     }
+    fn set_get_camera_prop_fn(&mut self, get_camera_prop_fn: GetCameraPropFn) {
+        self.get_camera_prop = Rc::new(Some(get_camera_prop_fn));
+    }
     fn run(&mut self) -> Result<(), Box<dyn Error>> {
         self.camera_list = self.get_camera_list.as_ref().as_ref().unwrap()()?;
         if !self.camera_list.is_empty() {
-            let win_width = (self.frame_width as usize * self.camera_list.len()) as i32;
-            let win_height = self.frame_height as i32 + 40;
+            let mut win_width: i32 = 0;
+            let max_frame_height = self.ui_frame_height;
+            for cam_id in &self.camera_list {
+                let prop = self.get_camera_prop.as_ref().as_ref().unwrap()(*cam_id)?;
+                println!("{:?}", prop);
+                let (width, height): (Vec<_>, Vec<_>) = prop
+                    .into_iter()
+                    .enumerate()
+                    .partition(|&(i, _)| (i % 2) == 0);
+                let max_w = width.iter().max_by(|a, b| a.1.cmp(&b.1)).unwrap();
+                let height_index = max_w.0 / 2;
+                self.image_res
+                    .insert(*cam_id, (max_w.1, height[height_index].1));
+                win_width += self.ui_frame_width;
+            }
+            let win_height = max_frame_height + 40;
             let app = App::default().with_scheme(Scheme::Gtk);
-            let mut wind = Window::new(100, 100, win_width, win_height, "NetBot server");
+            let mut wind = Window::new(100, 100, win_width, win_height + 40, "NetBot server");
             let global_pack = Pack::default()
                 .with_size(win_width, win_height)
                 .center_of(&wind);
             let mut cameras_pack = Pack::default()
-                .with_size(win_width, self.frame_height as i32)
+                .with_size(win_width, max_frame_height as i32)
                 .center_of(&wind);
             for cam_id in &self.camera_list {
-                let frame =
-                    Frame::default().with_size(self.frame_width as i32, self.frame_height as i32);
+                let frame = Frame::default().with_size(self.ui_frame_width, self.ui_frame_height);
                 self.image_frames.insert(*cam_id, frame);
             }
             cameras_pack.set_type(PackType::Horizontal);
@@ -120,11 +138,13 @@ impl WindowUi {
             get_camera_list: Rc::new(None),
             capture_image: Rc::new(None),
             move_fn: Rc::new(None),
+            get_camera_prop: Rc::new(None),
             camera_list: Vec::new(),
             image_data: HashMap::new(),
             image_frames: HashMap::new(),
-            frame_width: 640,
-            frame_height: 480,
+            image_res: HashMap::new(),
+            ui_frame_width: 640,
+            ui_frame_height: 480,
             move_speed: 10,
         }
     }
@@ -170,21 +190,32 @@ impl WindowUi {
 
     pub fn update_images(&mut self) -> Result<(), Box<dyn Error>> {
         for cam_id in &self.camera_list {
-            let image_data = self.capture_image.as_ref().as_ref().unwrap()(
-                *cam_id,
-                self.frame_width,
-                self.frame_height,
+            let (width, height) = self.image_res.entry(*cam_id).or_default();
+            let image_data =
+                self.capture_image.as_ref().as_ref().unwrap()(*cam_id, *width, *height)?;
+            let img_mat = Mat::from_slice(&image_data).unwrap();
+            let mut img_mat_reduced = Mat::default()?;
+            imgproc::resize(
+                &img_mat,
+                &mut img_mat_reduced,
+                core::Size {
+                    width: self.ui_frame_width,
+                    height: self.ui_frame_height,
+                },
+                0.0,
+                0.0,
+                imgproc::INTER_LINEAR,
             )?;
-            // let mut frame = Mat::from_slice(&img_data.unwrap()).unwrap();
-            // frame = frame.reshape(3, frame_height).unwrap();
             self.image_data
                 .entry(*cam_id)
-                .and_modify(|entry| entry.clone_from_slice(&image_data))
+                .and_modify(|entry| {
+                    entry.clone_from_slice(img_mat_reduced.data_typed::<u8>().unwrap())
+                })
                 .or_insert(image_data);
             let img = RgbImage::new(
                 &self.image_data.get(cam_id).unwrap(),
-                self.frame_width as u32,
-                self.frame_height as u32,
+                *width as u32,
+                *height as u32,
                 3, /*channels*/
             )?;
 

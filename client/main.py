@@ -18,6 +18,8 @@ def get_msg_obj(msg_id):
         MessageId.GET_CAMERA_LIST: GetCameraListMsg(),
         MessageId.SEND_CAMERA_LIST: SendCameraListMsg(),
         MessageId.MOVE: MoveMsg(),
+        MessageId.GET_CAMERA_PROP: GetCameraPropMsg(),
+        MessageId.SEND_CAMERA_PROP: SendCameraPropMsg(),
     }.get(msg_id)
     if not result:
         print('Unknown msg_id {}'.format(msg_id))
@@ -47,7 +49,7 @@ def get_camera_indices():
 
 
 def get_camera_prop(camera_id):
-    resolutions = [(320, 480), (640, 480), (800, 600), (1024, 768),
+    resolutions = [(320, 240), (640, 480), (800, 600), (1024, 768),
                    (960, 680), (1280, 720), (1440, 720), (1920, 1080)]
     cap = cv2.VideoCapture(camera_id, cv2.CAP_V4L)
     if cap.isOpened():
@@ -55,8 +57,8 @@ def get_camera_prop(camera_id):
         for resolution in resolutions:
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, resolution[0])
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, resolution[1])
-            is_captured, _ = cap.read()
-            if is_captured:
+            is_captured, frame = cap.read()
+            if is_captured and frame.shape[1] == resolution[0] and frame.shape[0] == resolution[1]:
                 arr.append(resolution[0])
                 arr.append(resolution[1])
         cap.release()
@@ -117,7 +119,7 @@ def process_move(msg):
 
 
 def process_message(msg):
-    print("Processing msg id : {}".format(msg.id()))
+    # print("Processing msg id : {}".format(msg.id()))
     result = {
         MessageId.CAPTURE_IMAGE: process_capture_image,
         MessageId.GET_CAMERA_LIST: process_get_camera_list,
