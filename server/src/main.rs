@@ -15,6 +15,7 @@ mod camera_prop_msg;
 mod image_msg;
 mod message;
 mod move_msg;
+mod robot;
 mod server;
 use server::Server;
 
@@ -88,6 +89,10 @@ pub fn get_camera_prop(server: &mut Server, camera_id: u8) -> Result<Vec<u16>, B
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    // let (tx, rx): (
+    //     std::sync::mpsc::Sender<Box<dyn SendMessage>>,
+    //     std::sync::mpsc::Receiver<Box<dyn SendMessage>>,
+    // ) = channel();
     let mut addr = Ipv4Addr::new(192, 168, 88, 184);
     let mut port = 2345;
     let args: Vec<String> = env::args().collect();
