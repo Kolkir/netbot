@@ -1,5 +1,6 @@
 use super::message;
 use message::{Message, MessageId, RecvMessage, SendMessage};
+use std::any::Any;
 
 #[derive(Debug)]
 pub struct GetCameraListMsg {
@@ -17,13 +18,21 @@ impl GetCameraListMsg {
     }
 }
 
-impl<'a> Message for GetCameraListMsg {
+impl Message for GetCameraListMsg {
     fn id(&self) -> u8 {
         return self.id;
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_mut_any(&mut self) -> &mut dyn Any {
+        self
+    }
 }
 
-impl<'a> SendMessage for GetCameraListMsg {
+impl SendMessage for GetCameraListMsg {
     fn size(&self) -> u32 {
         return 1;
     }
@@ -51,6 +60,14 @@ impl RecvCameraListMsg {
 impl Message for RecvCameraListMsg {
     fn id(&self) -> u8 {
         return self.id;
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_mut_any(&mut self) -> &mut dyn Any {
+        self
     }
 }
 

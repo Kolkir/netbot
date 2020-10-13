@@ -1,5 +1,6 @@
 use super::message;
 use message::{Message, MessageId, RecvMessage, SendMessage};
+use std::any::Any;
 
 #[derive(Debug)]
 pub struct CaptureImageMsg {
@@ -23,13 +24,21 @@ impl CaptureImageMsg {
     }
 }
 
-impl<'a> Message for CaptureImageMsg {
+impl Message for CaptureImageMsg {
     fn id(&self) -> u8 {
         return self.id;
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_mut_any(&mut self) -> &mut dyn Any {
+        self
+    }
 }
 
-impl<'a> SendMessage for CaptureImageMsg {
+impl SendMessage for CaptureImageMsg {
     fn size(&self) -> u32 {
         return 1 + 2 + 2;
     }
@@ -66,9 +75,17 @@ impl RecvImageMsg {
     }
 }
 
-impl<'a> Message for RecvImageMsg {
+impl Message for RecvImageMsg {
     fn id(&self) -> u8 {
         return self.id;
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_mut_any(&mut self) -> &mut dyn Any {
+        self
     }
 }
 

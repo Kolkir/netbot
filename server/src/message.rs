@@ -1,3 +1,6 @@
+use std::any::Any;
+
+#[derive(PartialEq, Eq, Hash)]
 pub enum MessageId {
     Hello = 1,
     CaptureImage = 2,
@@ -26,6 +29,8 @@ impl From<u8> for MessageId {
 }
 pub trait Message {
     fn id(&self) -> u8;
+    fn as_any(&self) -> &dyn Any;
+    fn as_mut_any(&mut self) -> &mut dyn Any;
 }
 
 pub trait SendMessage: Message {
@@ -42,6 +47,14 @@ pub struct HelloMsg {}
 impl Message for HelloMsg {
     fn id(&self) -> u8 {
         return MessageId::Hello as u8;
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_mut_any(&mut self) -> &mut dyn Any {
+        self
     }
 }
 

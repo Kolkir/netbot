@@ -17,12 +17,13 @@ use std::error::Error;
 use std::net::Ipv4Addr;
 
 #[derive(Clone)]
-struct Robot {
+pub struct Robot {
     camera_list: Vec<u8>,
     image_data: HashMap<u8, Vec<u8>>,
     image_res: HashMap<u8, (u16, u16)>,
     move_speed: u8,
     server: Server,
+    img_mat_reduced: Mat,
 }
 
 impl Robot {
@@ -33,6 +34,7 @@ impl Robot {
             image_data: HashMap::new(),
             move_speed: 10,
             server: Server::new(addr, port)?,
+            img_mat_reduced: Mat::default()?,
         })
     }
 
@@ -123,24 +125,39 @@ impl Robot {
             .or_insert(recv_msg.data);
 
         // scale image
-        let img_mat = Mat::from_slice(self.image_data.get(&cam_id).unwrap()).unwrap();
-        let mut img_mat_reduced = Mat::default()?;
+        let mut img_mat = Mat::from_slice(self.image_data.get(&cam_id).unwrap()).unwrap();
+        img_mat = img_mat.reshape(3, recv_msg.frame_height as i32)?;
+        let new_size = core::Size {
+            width: out_resolution.0 as i32,
+            height: out_resolution.1 as i32,
+        };
+        self.img_mat_reduced = Mat::default()?;
         imgproc::resize(
             &img_mat,
-            &mut img_mat_reduced,
-            core::Size {
-                width: out_resolution.0 as i32,
-                height: out_resolution.1 as i32,
-            },
+            &mut self.img_mat_reduced,
+            new_size,
             0.0,
             0.0,
-            imgproc::INTER_LINEAR,
+            imgproc::INTER_AREA,
         )?;
 
-        Ok(img_mat_reduced.data_typed::<u8>().unwrap().to_vec())
+        // println!(
+        //     "depth {0} channels {1} width {2} height {3} size {4} step {5}",
+        //     img_mat.depth()?,
+        //     img_mat.channels()?,
+        //     img_mat.cols(),
+        //     img_mat.rows(),
+        //     img_mat.total()? * img_mat_reduced.elem_size()?,
+        //     img_mat.step1(0)?
+        // );
+
+        self.img_mat_reduced = self
+            .img_mat_reduced
+            .reshape(1, self.img_mat_reduced.rows() * 3)?;
+        Ok(self.img_mat_reduced.data_typed::<u8>().unwrap().to_vec())
     }
 
-    fn move_bot(
+    pub fn move_bot(
         &mut self,
         left_speed: u8,
         left_dir: u8,
@@ -154,21 +171,5 @@ impl Robot {
         move_msg.right_dir = right_dir;
         self.server.send(Box::new(move_msg))?;
         Ok(())
-    }
-
-    pub fn move_forward(&mut self) -> Result<(), Box<dyn Error>> {
-        self.move_bot(self.move_speed, 1, self.move_speed, 1)
-    }
-
-    pub fn move_backward(&mut self) -> Result<(), Box<dyn Error>> {
-        self.move_bot(self.move_speed, 0, self.move_speed, 0)
-    }
-
-    pub fn rotate_right(&mut self) -> Result<(), Box<dyn Error>> {
-        self.move_bot(self.move_speed, 1, 0, 0)
-    }
-
-    pub fn rotate_left(&mut self) -> Result<(), Box<dyn Error>> {
-        self.move_bot(0, 0, self.move_speed, 1)
     }
 }

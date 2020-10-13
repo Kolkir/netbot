@@ -1,5 +1,6 @@
 use super::message;
 use message::{Message, MessageId, SendMessage};
+use std::any::Any;
 
 #[derive(Debug)]
 pub struct MoveMsg {
@@ -25,13 +26,21 @@ impl MoveMsg {
     }
 }
 
-impl<'a> Message for MoveMsg {
+impl Message for MoveMsg {
     fn id(&self) -> u8 {
         return self.id;
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_mut_any(&mut self) -> &mut dyn Any {
+        self
+    }
 }
 
-impl<'a> SendMessage for MoveMsg {
+impl SendMessage for MoveMsg {
     fn size(&self) -> u32 {
         return 1 + 1 + 1 + 1;
     }
