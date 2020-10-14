@@ -76,10 +76,14 @@ def capture_image(camera_id, frame_width, frame_height):
         cam.set(cv2.CAP_PROP_BACKLIGHT, 0)
         is_captured, frame = cam.read()
         if is_captured:
-            print("Frame was captured: width {} height {}".format(
-                frame.shape[1], frame.shape[0]))
+            # print("Frame was captured: width {} height {}".format(
+            #    frame.shape[1], frame.shape[0]))
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            return frame_rgb
+            is_encoded, buffer = cv2.imencode('.png', frame_rgb)
+            if not is_encoded:
+                print('Failed to encode captured frame')
+                return None
+            return buffer, frame_rgb.shape
         else:
             print('Failed to capture an image with width={} and height={}'.format(
                 frame_width, frame_height))
@@ -89,11 +93,11 @@ def capture_image(camera_id, frame_width, frame_height):
 
 
 def process_capture_image(msg):
-    print("Capturing image: camera {} width {} height {}".format(
-        msg.camera_id, msg.img_width, msg.img_height))
-    img = capture_image(msg.camera_id, msg.img_width, msg.img_height)
+    # print("Capturing image: camera {} width {} height {}".format(
+    #    msg.camera_id, msg.img_width, msg.img_height))
+    img, shape = capture_image(msg.camera_id, msg.img_width, msg.img_height)
     response = SendImageMsg()
-    response.set_img(img.data, img.shape[2], img.shape[1], img.shape[0])
+    response.set_img(img, shape[2], shape[1], shape[0])
     return response
 
 

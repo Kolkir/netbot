@@ -43,7 +43,7 @@ class Client:
                 done = False
                 while not done:
                     msg = self.recv_msg(s)
-                    print("Got msg_id {}".format(msg.id()))
+                    # print("Got msg_id {}".format(msg.id()))
                     response = self.process_message(msg)
                     if response:
                         self.send_msg(s, response)
