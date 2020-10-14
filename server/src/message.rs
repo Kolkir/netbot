@@ -10,6 +10,7 @@ pub enum MessageId {
     Move = 6,
     GetCameraProp = 7,
     RecvCameraProp = 8,
+    Stop = 9,
     Unknown,
 }
 impl From<u8> for MessageId {
@@ -23,6 +24,7 @@ impl From<u8> for MessageId {
             6 => return MessageId::Move,
             7 => return MessageId::GetCameraProp,
             8 => return MessageId::RecvCameraProp,
+            9 => return MessageId::Stop,
             _ => return MessageId::Unknown,
         };
     }
@@ -63,6 +65,31 @@ impl RecvMessage for HelloMsg {
 }
 
 impl SendMessage for HelloMsg {
+    fn size(&self) -> u32 {
+        return 0;
+    }
+    fn to_bytes(&mut self) -> Option<&[u8]> {
+        None
+    }
+}
+
+pub struct StopMsg {}
+
+impl Message for StopMsg {
+    fn id(&self) -> u8 {
+        return MessageId::Stop as u8;
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_mut_any(&mut self) -> &mut dyn Any {
+        self
+    }
+}
+
+impl SendMessage for StopMsg {
     fn size(&self) -> u32 {
         return 0;
     }
