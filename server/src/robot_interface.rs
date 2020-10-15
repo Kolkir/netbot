@@ -23,6 +23,7 @@ fn robot_thread(
     rx: std::sync::mpsc::Receiver<Box<dyn SendMessage + Send>>,
     tx: std::sync::mpsc::Sender<Box<dyn RecvMessage + Send>>,
 ) -> Result<(), Box<dyn Error>> {
+    println!("Robot thread started!");
     let mut robot = Robot::new(addr, port)?;
     robot.init()?;
     let mut stop_thread = false;
@@ -70,46 +71,54 @@ fn robot_thread(
             _ => panic!("Message is unsupported by robot thread"),
         }
     }
+    println!("Robot thread stopped");
     Ok(())
 }
 
 type RobotMessages = HashMap<MessageId, VecDeque<Box<dyn RecvMessage>>>;
 
-struct RobotInterface {
-    thread_join_handle: thread::JoinHandle<()>,
+pub struct RobotInterface {
+    thread_join_handle: Option<thread::JoinHandle<()>>,
     to_robot_tx: std::sync::mpsc::Sender<Box<dyn SendMessage + Send>>,
     from_robot_rx: std::sync::mpsc::Receiver<Box<dyn RecvMessage + Send>>,
     messages: RobotMessages,
+    move_speed: u8,
 }
 
 impl RobotInterface {
-    pub fn init(&mut self, addr: Ipv4Addr, port: u16) {
-        self.messages = RobotMessages::new();
-
+    pub fn new(addr: Ipv4Addr, port: u16) -> RobotInterface {
         let (to_robot_tx, in_robot_rx): (
             std::sync::mpsc::Sender<Box<dyn SendMessage + Send>>,
             std::sync::mpsc::Receiver<Box<dyn SendMessage + Send>>,
         ) = channel();
-
-        self.to_robot_tx = to_robot_tx;
-
         let (from_robot_tx, from_robot_rx): (
             std::sync::mpsc::Sender<Box<dyn RecvMessage + Send>>,
             std::sync::mpsc::Receiver<Box<dyn RecvMessage + Send>>,
         ) = channel();
 
-        self.from_robot_rx = from_robot_rx;
-
-        self.thread_join_handle = thread::spawn(move || {
-            robot_thread(addr, port, in_robot_rx, from_robot_tx).expect_err("Robot thread failed");
-        });
-        println!("Robot thread started");
+        RobotInterface {
+            move_speed: 10,
+            messages: RobotMessages::new(),
+            to_robot_tx: to_robot_tx,
+            from_robot_rx: from_robot_rx,
+            thread_join_handle: Some(thread::spawn(move || {
+                robot_thread(addr, port, in_robot_rx, from_robot_tx).expect("Robot thread failed");
+            })),
+        }
     }
 
-    pub fn stop_robot_thread(&mut self) {
+    pub fn stop_robot_thread(&mut self) -> Result<(), Box<dyn Error>> {
         let stop_msg = StopMsg {};
-        self.to_robot_tx.send(Box::new(stop_msg));
-        self.thread_join_handle.join();
+        match self.thread_join_handle.take() {
+            Some(handle) => {
+                self.to_robot_tx
+                    .send(Box::new(stop_msg))
+                    .expect("Can't send the stop message into robot channel");
+                handle.join().expect("Can't stop robot thread");
+            }
+            None => (),
+        }
+        Ok(())
     }
 
     pub fn get_robot_msg(&mut self, timeout: Duration) {
@@ -151,15 +160,13 @@ impl RobotInterface {
         }
     }
 
-    pub fn get_camera_list(&mut self, duration: Duration) -> Result<Vec<u8>, Box<dyn Error>> {
+    pub fn get_camera_list(&mut self, timeout: Duration) -> Result<Vec<u8>, Box<dyn Error>> {
         self.ask_camera_list()?;
         loop {
             let camera_list = self.get_camera_list_impl();
             match camera_list {
                 Some(list) => return Ok(list),
-                None => {
-                    std::thread::sleep(duration);
-                }
+                None => self.get_robot_msg(timeout),
             }
         }
     }
@@ -221,16 +228,17 @@ impl RobotInterface {
     }
 
     pub fn move_forward(&mut self) -> Result<(), Box<dyn Error>> {
-        self.move_bot_impl()(self.move_speed, 1, self.move_speed, 1)
+        self.move_bot_impl(self.move_speed, 1, self.move_speed, 1)
     }
 
     pub fn move_backward(&mut self) -> Result<(), Box<dyn Error>> {
-        self.move_bot_impl()(self.move_speed, 0, self.move_speed, 0);
+        self.move_bot_impl(self.move_speed, 0, self.move_speed, 0)
     }
 }
 
 impl Drop for RobotInterface {
     fn drop(&mut self) {
-        self.stop_robot_thread();
+        println!("Robot interface dropped");
+        self.stop_robot_thread().unwrap();
     }
 }
