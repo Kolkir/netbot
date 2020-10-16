@@ -316,9 +316,9 @@ dependencies = [
 
 [[package]]
 name = "glib"
-version = "0.10.2"
+version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f11a45bde4cf9567653a14ff96cdbb01e6d2a89651746dbc118319dfdac433e"
+checksum = "0c685013b7515e668f1b57a165b009d4d28cb139a8a989bbd699c10dad29d0c5"
 dependencies = [
  "bitflags",
  "futures-channel",
@@ -694,7 +694,11 @@ checksum = "96fe57af81d28386a513cbc6858332abc6117cfdb5999647c6444b8f43a370a5"
 name = "server"
 version = "0.1.0"
 dependencies = [
+ "cairo-rs",
+ "gdk",
+ "gdk-pixbuf",
  "gio",
+ "glib",
  "gtk",
  "opencv",
  "slice_as_array",

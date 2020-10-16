@@ -2,7 +2,11 @@
 
 #[macro_use]
 extern crate slice_as_array;
+extern crate cairo;
+extern crate gdk;
+extern crate gdk_pixbuf;
 extern crate gio;
+extern crate glib;
 extern crate gtk;
 
 use gio::prelude::*;
@@ -23,6 +27,7 @@ use std::cell::RefCell;
 use std::error::Error;
 use std::net::Ipv4Addr;
 use std::rc::Rc;
+use std::time::Duration;
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Initialize UI
@@ -65,8 +70,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     ui.as_mut()
                         .expect("UI is unreachable in the forward button callback")
                         .robot
-                        .move_forward()
-                        .expect("Failed to move robot forward");
+                        .move_forward();
                 });
         }
         {
@@ -80,8 +84,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     ui.as_mut()
                         .expect("UI is unreachable in the backward button callback")
                         .robot
-                        .move_backward()
-                        .expect("Failed to move robot backward");
+                        .move_backward();
                 });
         }
         {
@@ -92,8 +95,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 ui.as_mut()
                     .expect("UI is unreachable in the right button callback")
                     .robot
-                    .rotate_right()
-                    .expect("Failed to move robot right");
+                    .rotate_right();
             });
         }
         {
@@ -104,8 +106,17 @@ fn main() -> Result<(), Box<dyn Error>> {
                 ui.as_mut()
                     .expect("UI is unreachable in the left button callback")
                     .robot
-                    .rotate_left()
-                    .expect("Failed to move robot left");
+                    .rotate_left();
+            });
+        }
+        {
+            let ui_container_ref = Rc::clone(&ui_container);
+            glib::source::timeout_add_local(50, move || {
+                let mut ui = ui_container_ref.borrow_mut();
+                ui.as_mut()
+                    .expect("UI is unreachable in the left button callback")
+                    .update_robot_images(Duration::from_millis(10));
+                glib::Continue(true)
             });
         }
     });

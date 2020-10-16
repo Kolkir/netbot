@@ -56,6 +56,7 @@ impl SendMessage for CaptureImageMsg {
 #[derive(Debug)]
 pub struct RecvImageMsg {
     pub id: u8,
+    pub camera_id: u8,
     pub channels: u16,
     pub frame_width: u16,
     pub frame_height: u16,
@@ -67,6 +68,7 @@ impl RecvImageMsg {
         let id_value = MessageId::RecvImage as u8;
         RecvImageMsg {
             id: id_value,
+            camera_id: 0,
             channels: 0,
             frame_width: 0,
             frame_height: 0,
@@ -92,17 +94,20 @@ impl Message for RecvImageMsg {
 impl RecvMessage for RecvImageMsg {
     fn from_bytes(&mut self, _buf: &[u8]) {
         {
-            let tmp = slice_as_array!(&_buf[0..2], [u8; 2]).expect("RecvImageMsg wrong data");
+            self.camera_id = _buf[0];
+        }
+        {
+            let tmp = slice_as_array!(&_buf[1..3], [u8; 2]).expect("RecvImageMsg wrong data");
             self.channels = u16::from_be_bytes(*tmp);
         }
         {
-            let tmp = slice_as_array!(&_buf[2..4], [u8; 2]).expect("RecvImageMsg wrong data");
+            let tmp = slice_as_array!(&_buf[3..5], [u8; 2]).expect("RecvImageMsg wrong data");
             self.frame_width = u16::from_be_bytes(*tmp);
         }
         {
-            let tmp = slice_as_array!(&_buf[4..6], [u8; 2]).expect("RecvImageMsg wrong data");
+            let tmp = slice_as_array!(&_buf[5..7], [u8; 2]).expect("RecvImageMsg wrong data");
             self.frame_height = u16::from_be_bytes(*tmp);
         }
-        self.data.extend_from_slice(&_buf[6..]);
+        self.data.extend_from_slice(&_buf[7..]);
     }
 }

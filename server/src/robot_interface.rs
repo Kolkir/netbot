@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+use std::collections::binary_heap::BinaryHeap;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::error::Error;
@@ -17,6 +19,32 @@ use message::{MessageId, RecvMessage, SendMessage, StopMsg};
 use move_msg::MoveMsg;
 use robot::Robot;
 
+impl Ord for Box<dyn SendMessage + Send> {
+    fn cmp(&self, other: &Box<dyn SendMessage + Send>) -> Ordering {
+        match MessageId::from(other.id()) {
+            MessageId::CaptureImage => Ordering::Less,
+            _ => Ordering::Equal,
+        }
+    }
+}
+
+impl PartialOrd for Box<dyn SendMessage + Send> {
+    fn partial_cmp(&self, other: &Box<dyn SendMessage + Send>) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for Box<dyn SendMessage + Send> {
+    fn eq(&self, other: &Box<dyn SendMessage + Send>) -> bool {
+        match MessageId::from(other.id()) {
+            MessageId::CaptureImage => false,
+            _ => true,
+        }
+    }
+}
+
+impl Eq for Box<dyn SendMessage + Send> {}
+
 fn robot_thread(
     addr: Ipv4Addr,
     port: u16,
@@ -27,12 +55,19 @@ fn robot_thread(
     let mut robot = Robot::new(addr, port)?;
     robot.init()?;
     let mut stop_thread = false;
+    let mut message_queue: BinaryHeap<Box<dyn SendMessage + Send>> = BinaryHeap::new();
 
     while !stop_thread {
-        // TODO: add priority queue for messages
-        let msg = rx
+        let input_msg = rx
             .recv()
             .expect("Failed to get message in the Robot thread");
+        message_queue.push(input_msg);
+        let out_msg = message_queue.pop();
+        if out_msg.is_none() {
+            continue;
+        }
+        let msg = out_msg.unwrap();
+
         match MessageId::from(msg.id()) {
             MessageId::Stop => {
                 stop_thread = true;
@@ -81,8 +116,10 @@ pub struct RobotInterface {
     thread_join_handle: Option<thread::JoinHandle<()>>,
     to_robot_tx: std::sync::mpsc::Sender<Box<dyn SendMessage + Send>>,
     from_robot_rx: std::sync::mpsc::Receiver<Box<dyn RecvMessage + Send>>,
-    messages: RobotMessages,
+    in_messages_queue: RobotMessages,
+    image_request_status: HashMap<u8, i32>,
     move_speed: u8,
+    max_image_request_num: i32,
 }
 
 impl RobotInterface {
@@ -98,7 +135,9 @@ impl RobotInterface {
 
         RobotInterface {
             move_speed: 10,
-            messages: RobotMessages::new(),
+            max_image_request_num: 2,
+            in_messages_queue: RobotMessages::new(),
+            image_request_status: HashMap::new(),
             to_robot_tx: to_robot_tx,
             from_robot_rx: from_robot_rx,
             thread_join_handle: Some(thread::spawn(move || {
@@ -111,9 +150,7 @@ impl RobotInterface {
         let stop_msg = StopMsg {};
         match self.thread_join_handle.take() {
             Some(handle) => {
-                self.to_robot_tx
-                    .send(Box::new(stop_msg))
-                    .expect("Can't send the stop message into robot channel");
+                self.send_message_to_robot(Box::new(stop_msg));
                 handle.join().expect("Can't stop robot thread");
             }
             None => (),
@@ -125,22 +162,27 @@ impl RobotInterface {
         let recv_result = self.from_robot_rx.recv_timeout(timeout);
         if recv_result.is_ok() {
             let msg = recv_result.unwrap();
-            self.messages
+            self.in_messages_queue
                 .entry(MessageId::from(msg.id()))
                 .or_default()
                 .push_back(msg);
         }
     }
 
-    fn ask_camera_list(&mut self) -> Result<(), Box<dyn Error>> {
+    fn send_message_to_robot(&mut self, msg: Box<dyn SendMessage + Send>) {
+        self.to_robot_tx
+            .send(msg)
+            .expect("Failed send a message to robot thread");
+    }
+
+    fn ask_camera_list(&mut self) {
         let get_msg = GetCameraListMsg::new();
-        self.to_robot_tx.send(Box::new(get_msg))?;
-        Ok(())
+        self.send_message_to_robot(Box::new(get_msg));
     }
 
     fn get_camera_list_impl(&mut self) -> Option<Vec<u8>> {
         let key = MessageId::RecvCameraList;
-        let values = self.messages.get_mut(&key);
+        let values = self.in_messages_queue.get_mut(&key);
         match values {
             Some(queue) => {
                 if !queue.is_empty() {
@@ -161,7 +203,7 @@ impl RobotInterface {
     }
 
     pub fn get_camera_list(&mut self, timeout: Duration) -> Result<Vec<u8>, Box<dyn Error>> {
-        self.ask_camera_list()?;
+        self.ask_camera_list();
         loop {
             let camera_list = self.get_camera_list_impl();
             match camera_list {
@@ -171,30 +213,42 @@ impl RobotInterface {
         }
     }
 
-    pub fn ask_image(
-        &mut self,
-        camera_id: u8,
-        frame_width: u16,
-        frame_height: u16,
-    ) -> Result<(), Box<dyn Error>> {
+    pub fn ask_image(&mut self, camera_id: u8, frame_width: u16, frame_height: u16) {
+        let request = self.image_request_status.get_mut(&camera_id);
+        match request {
+            Some(value) => {
+                if *value > self.max_image_request_num {
+                    return ();
+                } else {
+                    *value += 1;
+                }
+            }
+            None => {
+                let _res = self.image_request_status.insert(camera_id, 1);
+            }
+        };
         let mut get_msg = CaptureImageMsg::new();
         get_msg.camera_id = camera_id;
         get_msg.frame_width = frame_width;
         get_msg.frame_height = frame_height;
-        self.to_robot_tx.send(Box::new(get_msg))?;
-        Ok(())
+        self.send_message_to_robot(Box::new(get_msg));
     }
 
-    pub fn get_image(&mut self) -> Option<Vec<u8>> {
+    pub fn get_image(&mut self) -> Option<(u8, Vec<u8>)> {
         let key = MessageId::RecvImage;
-        let values = self.messages.get_mut(&key);
+        let values = self.in_messages_queue.get_mut(&key);
         match values {
             Some(queue) => {
                 if !queue.is_empty() {
                     let mut msg = queue.pop_front().unwrap();
                     let image_msg = msg.as_mut_any().downcast_mut::<RecvImageMsg>().unwrap();
                     let image_data = std::mem::replace(&mut image_msg.data, Vec::new());
-                    Some(image_data)
+
+                    self.image_request_status
+                        .entry(image_msg.camera_id)
+                        .and_modify(|entry| *entry -= 1);
+
+                    Some((image_msg.camera_id, image_data))
                 } else {
                     None
                 }
@@ -203,36 +257,29 @@ impl RobotInterface {
         }
     }
 
-    fn move_bot_impl(
-        &mut self,
-        left_speed: u8,
-        left_dir: u8,
-        right_speed: u8,
-        right_dir: u8,
-    ) -> Result<(), Box<dyn Error>> {
+    fn move_bot_impl(&mut self, left_speed: u8, left_dir: u8, right_speed: u8, right_dir: u8) {
         let mut move_msg = MoveMsg::new();
         move_msg.left_speed = left_speed;
         move_msg.left_dir = left_dir;
         move_msg.right_speed = right_speed;
         move_msg.right_dir = right_dir;
-        self.to_robot_tx.send(Box::new(move_msg))?;
-        Ok(())
+        self.send_message_to_robot(Box::new(move_msg));
     }
 
-    pub fn rotate_left(&mut self) -> Result<(), Box<dyn Error>> {
-        self.move_bot_impl(0, 0, self.move_speed, 1)
+    pub fn rotate_left(&mut self) {
+        self.move_bot_impl(0, 0, self.move_speed, 1);
     }
 
-    pub fn rotate_right(&mut self) -> Result<(), Box<dyn Error>> {
-        self.move_bot_impl(self.move_speed, 1, 0, 0)
+    pub fn rotate_right(&mut self) {
+        self.move_bot_impl(self.move_speed, 1, 0, 0);
     }
 
-    pub fn move_forward(&mut self) -> Result<(), Box<dyn Error>> {
-        self.move_bot_impl(self.move_speed, 1, self.move_speed, 1)
+    pub fn move_forward(&mut self) {
+        self.move_bot_impl(self.move_speed, 1, self.move_speed, 1);
     }
 
-    pub fn move_backward(&mut self) -> Result<(), Box<dyn Error>> {
-        self.move_bot_impl(self.move_speed, 0, self.move_speed, 0)
+    pub fn move_backward(&mut self) {
+        self.move_bot_impl(self.move_speed, 0, self.move_speed, 0);
     }
 }
 

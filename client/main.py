@@ -97,7 +97,7 @@ def process_capture_image(msg):
     #    msg.camera_id, msg.img_width, msg.img_height))
     img, shape = capture_image(msg.camera_id, msg.img_width, msg.img_height)
     response = SendImageMsg()
-    response.set_img(img, shape[2], shape[1], shape[0])
+    response.set_img(msg.camera_id, img, shape[2], shape[1], shape[0])
     return response
 
 
