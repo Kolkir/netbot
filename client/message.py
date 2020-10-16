@@ -10,6 +10,7 @@ class MessageId(IntEnum):
     MOVE = 6
     GET_CAMERA_PROP = 7
     SEND_CAMERA_PROP = 8
+    STOP = 9
 
 
 class Message:
@@ -46,6 +47,20 @@ class SendMessage(Message):
 class HelloMsg(Message):
     def __init__(self):
         super().__init__(MessageId.HELLO)
+
+    def size(self):
+        return 0
+
+    def to_bytes(self):
+        return None
+
+    def from_bytes(self, data):
+        pass
+
+
+class StopMsg(Message):
+    def __init__(self):
+        super().__init__(MessageId.STOP)
 
     def size(self):
         return 0

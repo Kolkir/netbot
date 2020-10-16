@@ -70,6 +70,7 @@ fn robot_thread(
 
         match MessageId::from(msg.id()) {
             MessageId::Stop => {
+                robot.stop()?;
                 stop_thread = true;
             }
             MessageId::CaptureImage => {

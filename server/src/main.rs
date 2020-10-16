@@ -111,12 +111,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         {
             let ui_container_ref = Rc::clone(&ui_container);
-            glib::source::timeout_add_local(50, move || {
+            glib::source::timeout_add_local(30, move || {
                 let mut ui = ui_container_ref.borrow_mut();
-                ui.as_mut()
-                    .expect("UI is unreachable in the left button callback")
-                    .update_robot_images(Duration::from_millis(10));
-                glib::Continue(true)
+                ui.as_mut().map_or_else(
+                    || glib::Continue(false),
+                    |v| {
+                        v.update_robot_images(Duration::from_millis(10));
+                        glib::Continue(true)
+                    },
+                )
             });
         }
     });

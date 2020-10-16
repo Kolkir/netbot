@@ -1,6 +1,6 @@
 
 import socket as sock
-from message import MessageId, HelloMsg
+from message import MessageId, HelloMsg, StopMsg
 
 
 class Client:
@@ -45,6 +45,8 @@ class Client:
                     msg = self.recv_msg(s)
                     # print("Got msg_id {}".format(msg.id()))
                     response = self.process_message(msg)
+                    if type(response) is StopMsg:
+                        break
                     if response:
                         self.send_msg(s, response)
                 print('Connection closed')

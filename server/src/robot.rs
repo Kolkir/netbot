@@ -8,7 +8,7 @@ use super::server;
 use camera_msg::{GetCameraListMsg, RecvCameraListMsg};
 use camera_prop_msg::{GetCameraPropMsg, RecvCameraPropMsg};
 use image_msg::{CaptureImageMsg, RecvImageMsg};
-use message::{HelloMsg, Message, MessageId};
+use message::{HelloMsg, Message, MessageId, StopMsg};
 use move_msg::MoveMsg;
 use opencv::{core, imgcodecs, imgproc, prelude::*};
 use server::Server;
@@ -54,6 +54,11 @@ impl Robot {
         // receive bot cameras properties
         self.recv_camera_list()?;
         self.recv_camera_prop()?;
+        Ok(())
+    }
+
+    pub fn stop(&mut self) -> Result<(), Box<dyn Error>> {
+        self.server.send(Box::new(StopMsg {}))?;
         Ok(())
     }
 
