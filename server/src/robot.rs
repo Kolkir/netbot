@@ -6,7 +6,7 @@ use super::message;
 use super::move_msg;
 use super::server;
 use camera_msg::{GetCameraListMsg, RecvCameraListMsg};
-use camera_prop_msg::{GetCameraPropMsg, RecvCameraPropMsg};
+use camera_prop_msg::{GetCameraPropMsg, RecvCameraPropMsg, SetCameraPropMsg};
 use image_msg::{CaptureImageMsg, RecvImageMsg};
 use message::{HelloMsg, Message, MessageId, StopMsg};
 use move_msg::MoveMsg;
@@ -54,6 +54,8 @@ impl Robot {
         // receive bot cameras properties
         self.recv_camera_list()?;
         self.recv_camera_prop()?;
+        // set bot cameras resolution
+        self.set_max_camera_prop()?;
         Ok(())
     }
 
@@ -104,6 +106,19 @@ impl Robot {
         Ok(self.camera_list.clone())
     }
 
+    pub fn set_max_camera_prop(&mut self) -> Result<(), Box<dyn Error>> {
+        if !self.camera_list.is_empty() {
+            for cam_id in &self.camera_list {
+                let mut set_msg = SetCameraPropMsg::new();
+                set_msg.camera_id = *cam_id;
+                let frame_resolution = self.get_max_frame_resolution(*cam_id).unwrap();
+                set_msg.frame_width = frame_resolution.0;
+                set_msg.frame_height = frame_resolution.1;
+                self.server.send(Box::new(set_msg))?;
+            }
+        }
+        Ok(())
+    }
     pub fn capture_frame(
         &mut self,
         cam_id: u8,
@@ -111,9 +126,6 @@ impl Robot {
     ) -> Result<Vec<u8>, Box<dyn Error>> {
         let mut get_msg = CaptureImageMsg::new();
         get_msg.camera_id = cam_id;
-        let frame_resolution = self.get_max_frame_resolution(cam_id).unwrap();
-        get_msg.frame_width = frame_resolution.0;
-        get_msg.frame_height = frame_resolution.1;
         self.server.send(Box::new(get_msg))?;
 
         let mut recv_msg = RecvImageMsg::new();

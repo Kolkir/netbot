@@ -9,11 +9,13 @@ use std::thread;
 use std::time::Duration;
 
 use super::camera_msg;
+use super::camera_prop_msg;
 use super::image_msg;
 use super::message;
 use super::move_msg;
 use super::robot;
 use camera_msg::{GetCameraListMsg, RecvCameraListMsg};
+use camera_prop_msg::SetCameraPropMsg;
 use image_msg::{CaptureImageMsg, RecvImageMsg};
 use message::{MessageId, RecvMessage, SendMessage, StopMsg};
 use move_msg::MoveMsg;
@@ -56,6 +58,8 @@ fn robot_thread(
     robot.init()?;
     let mut stop_thread = false;
     let mut message_queue: BinaryHeap<Box<dyn SendMessage + Send>> = BinaryHeap::new();
+    let mut frame_width = 640;
+    let mut frame_height = 480;
 
     while !stop_thread {
         let input_msg = rx
@@ -73,19 +77,19 @@ fn robot_thread(
                 robot.stop()?;
                 stop_thread = true;
             }
+            MessageId::SetCameraProp => {
+                let camera_prop_msg = msg.as_any().downcast_ref::<SetCameraPropMsg>().unwrap();
+                frame_width = camera_prop_msg.frame_width;
+                frame_height = camera_prop_msg.frame_height;
+            }
             MessageId::CaptureImage => {
                 let capture_image_msg = msg.as_any().downcast_ref::<CaptureImageMsg>().unwrap();
-                let frame_data = robot.capture_frame(
-                    capture_image_msg.camera_id,
-                    (
-                        capture_image_msg.frame_width,
-                        capture_image_msg.frame_height,
-                    ),
-                )?;
+                let frame_data = robot
+                    .capture_frame(capture_image_msg.camera_id, (frame_width, frame_height))?;
                 let mut send_image_msg = RecvImageMsg::new();
                 send_image_msg.channels = 3;
-                send_image_msg.frame_width = capture_image_msg.frame_width;
-                send_image_msg.frame_height = capture_image_msg.frame_height;
+                send_image_msg.frame_width = frame_width;
+                send_image_msg.frame_height = frame_height;
                 send_image_msg.data = frame_data;
                 tx.send(Box::new(send_image_msg))?;
             }
@@ -214,7 +218,15 @@ impl RobotInterface {
         }
     }
 
-    pub fn ask_image(&mut self, camera_id: u8, frame_width: u16, frame_height: u16) {
+    pub fn set_robot_ui_camera_resolution(&mut self, frame_width: i32, frame_height: i32) {
+        let mut set_msg = SetCameraPropMsg::new();
+        set_msg.camera_id = 0;
+        set_msg.frame_width = frame_width as u16;
+        set_msg.frame_height = frame_height as u16;
+        self.send_message_to_robot(Box::new(set_msg));
+    }
+
+    pub fn ask_image(&mut self, camera_id: u8) {
         let request = self.image_request_status.get_mut(&camera_id);
         match request {
             Some(value) => {
@@ -230,8 +242,6 @@ impl RobotInterface {
         };
         let mut get_msg = CaptureImageMsg::new();
         get_msg.camera_id = camera_id;
-        get_msg.frame_width = frame_width;
-        get_msg.frame_height = frame_height;
         self.send_message_to_robot(Box::new(get_msg));
     }
 

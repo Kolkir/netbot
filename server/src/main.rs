@@ -45,7 +45,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         .expect("failed to initialize GTK application");
 
     application.connect_startup(move |app| {
-        let window_ui = WindowUi::new(app, addr, port);
+        let mut window_ui = WindowUi::new(app, addr, port);
+        window_ui.configure_robot_camera();
         let ui_container = Rc::new(RefCell::new(Some(window_ui)));
         {
             let ui_container_ref = Rc::clone(&ui_container);

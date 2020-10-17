@@ -23,6 +23,7 @@ def get_msg_obj(msg_id):
         MessageId.GET_CAMERA_PROP: GetCameraPropMsg(),
         MessageId.SEND_CAMERA_PROP: SendCameraPropMsg(),
         MessageId.STOP: StopMsg(),
+        MessageId.SET_CAMERA_PROP: SetCameraPropMsg()
     }.get(msg_id)
     if not result:
         print('Unknown msg_id {}'.format(msg_id))
@@ -67,13 +68,25 @@ def get_camera_prop(camera_id):
     return None
 
 
-def capture_image(camera_id, frame_width, frame_height):
+def set_camera_prop(camera_id, frame_width, frame_height):
     cam = cameras[camera_id]
     if cam.isOpened():
-        # cam.set(cv2.CAP_PROP_FRAME_WIDTH, frame_width)
-        # cam.set(cv2.CAP_PROP_FRAME_HEIGHT, frame_height)
-        # cam.set(cv2.CAP_PROP_BACKLIGHT, 0)
-        # cam.set(cv2.CAP_PROP_FPS, 30)
+        cam.set(cv2.CAP_PROP_FRAME_WIDTH, frame_width)
+        cam.set(cv2.CAP_PROP_FRAME_HEIGHT, frame_height)
+        cam.set(cv2.CAP_PROP_BACKLIGHT, 0)
+        cam.set(cv2.CAP_PROP_FPS, 30)
+        is_captured, frame = cam.read()
+        if not is_captured:
+            print('Failed to set camera prop with width={} and height={}'.format(
+                frame_width, frame_height))
+    else:
+        print('Failed to open the camera {}'.format(camera_id))
+    return None
+
+
+def capture_image(camera_id):
+    cam = cameras[camera_id]
+    if cam.isOpened():
         is_captured, frame = cam.read()
         if is_captured:
             # print("Frame was captured: width {} height {}".format(
@@ -85,17 +98,21 @@ def capture_image(camera_id, frame_width, frame_height):
                 return None
             return buffer, frame_rgb.shape
         else:
-            print('Failed to capture an image with width={} and height={}'.format(
-                frame_width, frame_height))
+            print('Failed to capture an image')
     else:
         print('Failed to open the camera {}'.format(camera_id))
     return None
 
 
+def process_set_camera_prop(msg):
+    print("Set camera props: camera {} width {} height {}".format(
+        msg.camera_id, msg.frame_width, msg.frame_height))
+    set_camera_prop(msg.camera_id, msg.frame_width, msg.frame_height)
+
+
 def process_capture_image(msg):
-    # print("Capturing image: camera {} width {} height {}".format(
-    #    msg.camera_id, msg.img_width, msg.img_height))
-    img, shape = capture_image(msg.camera_id, msg.img_width, msg.img_height)
+    # print("Capturing image: camera {}")
+    img, shape = capture_image(msg.camera_id)
     response = SendImageMsg()
     response.set_img(msg.camera_id, img, shape[2], shape[1], shape[0])
     return response
@@ -137,6 +154,7 @@ def process_message(msg):
         MessageId.MOVE: process_move,
         MessageId.GET_CAMERA_PROP: process_camera_prop,
         MessageId.STOP: process_stop,
+        MessageId.SET_CAMERA_PROP: process_set_camera_prop,
     }.get(msg.id())(msg)
     return result
 

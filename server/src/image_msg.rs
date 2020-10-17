@@ -6,8 +6,6 @@ use std::any::Any;
 pub struct CaptureImageMsg {
     pub id: u8,
     pub camera_id: u8,
-    pub frame_width: u16,
-    pub frame_height: u16,
     data: Vec<u8>,
 }
 
@@ -17,8 +15,6 @@ impl CaptureImageMsg {
         CaptureImageMsg {
             id: id_value,
             camera_id: 0,
-            frame_width: 0,
-            frame_height: 0,
             data: Vec::new(),
         }
     }
@@ -45,11 +41,7 @@ impl SendMessage for CaptureImageMsg {
 
     fn to_bytes(&mut self) -> Option<&[u8]> {
         self.data.push(self.camera_id);
-        let width_bytes = self.frame_width.to_be_bytes();
-        self.data.extend_from_slice(&width_bytes);
-        let height_bytes = self.frame_height.to_be_bytes();
-        self.data.extend_from_slice(&height_bytes);
-        return Some(&self.data[..]);
+        return Some(&self.data);
     }
 }
 

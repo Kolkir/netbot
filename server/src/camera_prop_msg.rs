@@ -90,3 +90,53 @@ impl RecvMessage for RecvCameraPropMsg {
         }
     }
 }
+
+#[derive(Debug)]
+pub struct SetCameraPropMsg {
+    pub id: u8,
+    pub camera_id: u8,
+    pub frame_width: u16,
+    pub frame_height: u16,
+    data: Vec<u8>,
+}
+
+impl SetCameraPropMsg {
+    pub fn new() -> SetCameraPropMsg {
+        let id_value = MessageId::SetCameraProp as u8;
+        SetCameraPropMsg {
+            id: id_value,
+            camera_id: 0,
+            frame_width: 0,
+            frame_height: 0,
+            data: Vec::new(),
+        }
+    }
+}
+
+impl Message for SetCameraPropMsg {
+    fn id(&self) -> u8 {
+        return self.id;
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_mut_any(&mut self) -> &mut dyn Any {
+        self
+    }
+}
+
+impl SendMessage for SetCameraPropMsg {
+    fn size(&self) -> u32 {
+        return 1 + 2 + 2;
+    }
+    fn to_bytes(&mut self) -> Option<&[u8]> {
+        self.data.push(self.camera_id);
+        let width_bytes = self.frame_width.to_be_bytes();
+        self.data.extend_from_slice(&width_bytes);
+        let height_bytes = self.frame_height.to_be_bytes();
+        self.data.extend_from_slice(&height_bytes);
+        return Some(&self.data);
+    }
+}

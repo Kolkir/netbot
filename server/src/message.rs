@@ -11,6 +11,7 @@ pub enum MessageId {
     GetCameraProp = 7,
     RecvCameraProp = 8,
     Stop = 9,
+    SetCameraProp = 10,
     Unknown,
 }
 impl From<u8> for MessageId {
@@ -25,6 +26,7 @@ impl From<u8> for MessageId {
             7 => return MessageId::GetCameraProp,
             8 => return MessageId::RecvCameraProp,
             9 => return MessageId::Stop,
+            10 => return MessageId::SetCameraProp,
             _ => return MessageId::Unknown,
         };
     }

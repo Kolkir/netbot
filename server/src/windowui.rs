@@ -120,6 +120,11 @@ impl<'a> WindowUi {
         }
     }
 
+    pub fn configure_robot_camera(&mut self) {
+        self.robot
+            .set_robot_ui_camera_resolution(self.ui_frame_width, self.ui_frame_height);
+    }
+
     pub fn update_robot_images(&mut self, timeout: Duration) {
         self.robot.get_robot_msg(timeout);
         let image = self.robot.get_image();
@@ -140,11 +145,7 @@ impl<'a> WindowUi {
             None => {
                 for (cam_id, _) in &self.camera_views {
                     let key = *cam_id;
-                    self.robot.ask_image(
-                        key,
-                        self.ui_frame_width as u16,
-                        self.ui_frame_height as u16,
-                    );
+                    self.robot.ask_image(key);
                 }
             }
         }

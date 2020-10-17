@@ -11,6 +11,7 @@ class MessageId(IntEnum):
     GET_CAMERA_PROP = 7
     SEND_CAMERA_PROP = 8
     STOP = 9
+    SET_CAMERA_PROP = 10
 
 
 class Message:
