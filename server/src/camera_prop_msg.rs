@@ -47,6 +47,7 @@ impl SendMessage for GetCameraPropMsg {
 #[derive(Debug)]
 pub struct RecvCameraPropMsg {
     pub id: u8,
+    pub camera_id: u8,
     pub camera_prop: Vec<u16>,
 }
 
@@ -55,6 +56,7 @@ impl RecvCameraPropMsg {
         let id_value = MessageId::RecvCameraProp as u8;
         RecvCameraPropMsg {
             id: id_value,
+            camera_id: 0,
             camera_prop: Vec::new(),
         }
     }
@@ -76,14 +78,15 @@ impl Message for RecvCameraPropMsg {
 
 impl RecvMessage for RecvCameraPropMsg {
     fn from_bytes(&mut self, buf: &[u8]) {
+        self.camera_id = buf[0];
         let size: usize;
         {
-            let tmp = slice_as_array!(&buf[0..2], [u8; 2]).expect("RecvCameraPropMsg wrong data");
+            let tmp = slice_as_array!(&buf[1..3], [u8; 2]).expect("RecvCameraPropMsg wrong data");
             size = u16::from_be_bytes(*tmp) as usize;
         }
         self.camera_prop.resize(size, 0);
         for i in 0..size {
-            let s = 2 + i * 2;
+            let s = 3 + i * 2;
             let e = s + 2;
             let tmp = slice_as_array!(&buf[s..e], [u8; 2]).expect("RecvCameraPropMsg wrong data");
             self.camera_prop[i] = u16::from_be_bytes(*tmp);
@@ -97,6 +100,8 @@ pub struct SetCameraPropMsg {
     pub camera_id: u8,
     pub frame_width: u16,
     pub frame_height: u16,
+    pub fps: u8,
+    pub encode: u8,
     data: Vec<u8>,
 }
 
@@ -108,6 +113,8 @@ impl SetCameraPropMsg {
             camera_id: 0,
             frame_width: 0,
             frame_height: 0,
+            fps: 0,
+            encode: 0,
             data: Vec::new(),
         }
     }
@@ -129,14 +136,17 @@ impl Message for SetCameraPropMsg {
 
 impl SendMessage for SetCameraPropMsg {
     fn size(&self) -> u32 {
-        return 1 + 2 + 2;
+        return 1 + 2 + 2 + 1 + 1;
     }
     fn to_bytes(&mut self) -> Option<&[u8]> {
         self.data.push(self.camera_id);
+
         let width_bytes = self.frame_width.to_be_bytes();
         self.data.extend_from_slice(&width_bytes);
         let height_bytes = self.frame_height.to_be_bytes();
         self.data.extend_from_slice(&height_bytes);
+        self.data.push(self.fps);
+        self.data.push(self.encode);
         return Some(&self.data);
     }
 }

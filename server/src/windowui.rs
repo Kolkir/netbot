@@ -5,11 +5,6 @@ use gtk::prelude::*;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
-use std::net::Ipv4Addr;
-use std::time::Duration;
-
-use super::robot_interface;
-use robot_interface::RobotInterface;
 
 #[derive(Debug)]
 enum UiErrors {
@@ -24,7 +19,6 @@ impl fmt::Display for UiErrors {
 impl Error for UiErrors {}
 
 pub struct WindowUi {
-    pub robot: RobotInterface,
     ui_frame_width: i32,
     ui_frame_height: i32,
     pub camera_views: HashMap<u8, gtk::Image>,
@@ -37,19 +31,16 @@ pub struct WindowUi {
 }
 
 impl<'a> WindowUi {
-    pub fn new(application: &gtk::Application, addr: Ipv4Addr, port: u16) -> WindowUi {
-        let mut robot = RobotInterface::new(addr, port);
-        let camera_list = robot
-            .get_camera_list(Duration::from_millis(100))
-            .expect("Failed to get list of bot cameras");
-
+    pub fn new(
+        application: &gtk::Application,
+        camera_list: &Vec<u8>,
+        frame_width: i32,
+        frame_height: i32,
+    ) -> WindowUi {
         let camera_num = camera_list.len();
         let buttons_num = 4;
         let max_cols_num = std::cmp::max(camera_num, buttons_num);
         let cols_per_camera_view = max_cols_num / camera_num;
-
-        let frame_width = 640;
-        let frame_height = 480;
 
         let mut camera_views: HashMap<u8, gtk::Image> = HashMap::new();
         for cam_id in camera_list {
@@ -59,7 +50,7 @@ impl<'a> WindowUi {
             camera_view.set_hexpand(false);
             camera_view.set_valign(gtk::Align::Center);
             camera_view.set_size_request(frame_width, frame_height);
-            camera_views.insert(cam_id, camera_view);
+            camera_views.insert(*cam_id, camera_view);
         }
 
         let forward_button = gtk::Button::new();
@@ -107,7 +98,6 @@ impl<'a> WindowUi {
             Inhibit(false)
         });
         WindowUi {
-            robot: robot,
             ui_frame_width: frame_width,
             ui_frame_height: frame_height,
             camera_views: camera_views,
@@ -120,35 +110,18 @@ impl<'a> WindowUi {
         }
     }
 
-    pub fn configure_robot_camera(&mut self) {
-        self.robot
-            .set_robot_ui_camera_resolution(self.ui_frame_width, self.ui_frame_height);
-    }
-
-    pub fn update_robot_images(&mut self, timeout: Duration) {
-        self.robot.get_robot_msg(timeout);
-        let image = self.robot.get_image();
-        match image {
-            Some(id_image_pair) => {
-                let view = (&self.camera_views).get(&id_image_pair.0).unwrap();
-                let pixbuf = Pixbuf::from_mut_slice(
-                    id_image_pair.1,
-                    gdk_pixbuf::Colorspace::Rgb,
-                    /*has alpha*/ false,
-                    /*bits_per_sample*/ 8,
-                    self.ui_frame_width,
-                    self.ui_frame_height,
-                    /*row stride*/ self.ui_frame_width * 3,
-                );
-                view.set_from_pixbuf(Some(&pixbuf));
-            }
-            None => {
-                for (cam_id, _) in &self.camera_views {
-                    let key = *cam_id;
-                    self.robot.ask_image(key);
-                }
-            }
-        }
+    pub fn update_image(&mut self, camera_id: u8, image_data: &mut Vec<u8>) {
+        let view = (&self.camera_views).get(&camera_id).unwrap();
+        let pixbuf = Pixbuf::from_mut_slice(
+            image_data,
+            gdk_pixbuf::Colorspace::Rgb,
+            /*has alpha*/ false,
+            /*bits_per_sample*/ 8,
+            self.ui_frame_width,
+            self.ui_frame_height,
+            /*row stride*/ self.ui_frame_width * 3,
+        );
+        view.set_from_pixbuf(Some(&pixbuf));
     }
 }
 

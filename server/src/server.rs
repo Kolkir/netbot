@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::error::Error;
 use std::fmt;
 use std::io::{Read, Write};
@@ -7,7 +6,7 @@ use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
 use std::rc::Rc;
 
 use super::message;
-use message::{RecvMessage, SendMessage};
+use message::SendMessage;
 
 #[derive(Debug)]
 enum ServerErrors {
@@ -20,36 +19,40 @@ impl fmt::Display for ServerErrors {
 }
 impl Error for ServerErrors {}
 
-#[derive(Clone)]
 pub struct Server {
-    socket: SocketAddrV4,
-    listener: Rc<TcpListener>,
-    tcp_stream: Rc<RefCell<Option<TcpStream>>>,
+    tcp_stream: Option<TcpStream>,
+}
+
+impl Clone for Server {
+    fn clone(&self) -> Server {
+        match &self.tcp_stream {
+            Some(stream) => Server {
+                tcp_stream: Some(stream.try_clone().expect("Failed to clone tcp_stream")),
+            },
+            None => Server::new(),
+        }
+    }
 }
 
 impl Server {
-    pub fn new(addr: Ipv4Addr, port: u16) -> Result<Server, Box<dyn Error>> {
-        let socket = SocketAddrV4::new(addr, port);
-        Ok(Server {
-            socket: socket,
-            listener: Rc::new(TcpListener::bind(socket)?),
-            tcp_stream: Rc::new(RefCell::new(None)),
-        })
+    pub fn new() -> Server {
+        Server { tcp_stream: None }
     }
-    pub fn wait_client(&mut self) -> Result<(), Box<dyn Error>> {
-        let port = self.listener.local_addr()?;
+    pub fn wait_client(&mut self, addr: Ipv4Addr, port: u16) -> Result<(), Box<dyn Error>> {
+        let socket_addr = SocketAddrV4::new(addr, port);
+        let listener = Rc::new(TcpListener::bind(socket_addr)?);
+        let port = listener.local_addr()?;
         println!("Listening on {}, access this port from a client", port);
-        let (tcp_stream, client_addr) = self.listener.accept()?; //block  until requested
-        self.tcp_stream = Rc::new(RefCell::new(Some(tcp_stream)));
+        let (tcp_stream, client_addr) = listener.accept()?; //block  until requested
+        self.tcp_stream = Some(tcp_stream);
         println!("Connection received! {:?}", client_addr);
         Ok(())
     }
 
     pub fn send(&mut self, msg: Box<dyn SendMessage>) -> Result<(), Box<dyn Error>> {
         let mut msg = msg;
-        let stream = self.tcp_stream.borrow();
-        match stream.as_ref() {
-            Some(mut stream) => {
+        match &mut self.tcp_stream {
+            Some(stream) => {
                 let mut id_size: [u8; 5] = [0; 5];
                 id_size[0] = msg.id();
                 let size_bytes = msg.size().to_be_bytes();
@@ -68,31 +71,21 @@ impl Server {
         }
     }
 
-    pub fn recv<T: RecvMessage>(&mut self, msg: &mut T) -> Result<(), Box<dyn Error>> {
-        let mut stream = self.tcp_stream.borrow_mut();
-        match stream.as_mut() {
+    pub fn recv(&mut self) -> Result<(u8, Vec<u8>), Box<dyn Error>> {
+        match &mut self.tcp_stream {
             Some(stream) => {
                 let mut id_size: [u8; 5] = [0; 5];
                 stream.read_exact(&mut id_size)?;
                 let tmp = slice_as_array!(&id_size[1..], [u8; 4])
                     .expect("Server::recv wrong header data");
                 let size = u32::from_be_bytes(*tmp);
-                Server::read_msg::<T>(msg, stream, size as usize)?;
-                Ok(())
+                let id = id_size[0];
+                let mut buf: Vec<u8> = Vec::new();
+                buf.resize(size as usize, 0);
+                stream.read_exact(&mut buf)?;
+                Ok((id, buf))
             }
             None => Err(Box::new(ServerErrors::MissedConnection)),
         }
-    }
-
-    fn read_msg<T: RecvMessage>(
-        msg: &mut T,
-        stream: &mut TcpStream,
-        size: usize,
-    ) -> Result<(), Box<dyn Error>> {
-        let mut buf: Vec<u8> = Vec::new();
-        buf.resize(size, 0);
-        stream.read_exact(&mut buf)?;
-        msg.from_bytes(&buf);
-        Ok(())
     }
 }

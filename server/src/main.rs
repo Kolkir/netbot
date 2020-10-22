@@ -20,13 +20,14 @@ mod image_msg;
 mod message;
 mod move_msg;
 mod robot;
-mod robot_interface;
 mod server;
 
+use robot::Robot;
 use std::cell::RefCell;
 use std::error::Error;
 use std::net::Ipv4Addr;
 use std::rc::Rc;
+use std::thread;
 use std::time::Duration;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -41,12 +42,46 @@ fn main() -> Result<(), Box<dyn Error>> {
         port = args[2].parse::<u16>().unwrap();
     }
 
+    let robot = Rc::new(RefCell::new(Robot::new()?));
+    robot.borrow_mut().init(addr, port)?;
+    {
+        println!("Getting camera list...");
+        robot.borrow_mut().ask_camera_list()?;
+        let mut camera_list: Option<Vec<u8>>;
+        loop {
+            camera_list = robot.borrow_mut().get_camera_list();
+            if camera_list.is_none() {
+                thread::sleep(Duration::from_millis(100));
+            } else {
+                break;
+            }
+        }
+
+        println!("Getting cameras resolutions...");
+        for camera_id in camera_list.as_ref().unwrap() {
+            robot.borrow_mut().ask_camera_prop(*camera_id)?;
+        }
+        for camera_id in camera_list.as_ref().unwrap() {
+            if robot
+                .borrow_mut()
+                .get_camera_resolutions(*camera_id)
+                .is_none()
+            {
+                thread::sleep(Duration::from_millis(100));
+            } else {
+                break;
+            }
+        }
+    }
+    println!("UI initialization...");
+
     let application = Application::new(Some("com.github.kolkir.netbot"), Default::default())
         .expect("failed to initialize GTK application");
 
+    let robot_ui = Rc::clone(&robot);
     application.connect_startup(move |app| {
-        let mut window_ui = WindowUi::new(app, addr, port);
-        window_ui.configure_robot_camera();
+        let camera_list = robot_ui.borrow_mut().get_camera_list();
+        let window_ui = WindowUi::new(app, camera_list.as_ref().unwrap(), 640, 480);
         let ui_container = Rc::new(RefCell::new(Some(window_ui)));
         {
             let ui_container_ref = Rc::clone(&ui_container);
@@ -61,63 +96,52 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         use crate::gtk::ButtonExt;
         {
-            let ui_container_ref = Rc::clone(&ui_container);
+            let robot_ref = Rc::clone(&robot_ui);
             let ui = ui_container.borrow_mut();
             ui.as_ref()
                 .unwrap()
                 .forward_button
                 .connect_clicked(move |_| {
-                    let mut ui = ui_container_ref.borrow_mut();
-                    ui.as_mut()
-                        .expect("UI is unreachable in the forward button callback")
-                        .robot
-                        .move_forward();
+                    robot_ref.borrow_mut().move_forward();
                 });
         }
         {
-            let ui_container_ref = Rc::clone(&ui_container);
+            let robot_ref = Rc::clone(&robot_ui);
             let ui = ui_container.borrow_mut();
             ui.as_ref()
                 .unwrap()
                 .backward_button
                 .connect_clicked(move |_| {
-                    let mut ui = ui_container_ref.borrow_mut();
-                    ui.as_mut()
-                        .expect("UI is unreachable in the backward button callback")
-                        .robot
-                        .move_backward();
+                    robot_ref.borrow_mut().move_backward();
                 });
         }
         {
-            let ui_container_ref = Rc::clone(&ui_container);
+            let robot_ref = Rc::clone(&robot_ui);
             let ui = ui_container.borrow_mut();
             ui.as_ref().unwrap().right_button.connect_clicked(move |_| {
-                let mut ui = ui_container_ref.borrow_mut();
-                ui.as_mut()
-                    .expect("UI is unreachable in the right button callback")
-                    .robot
-                    .rotate_right();
+                robot_ref.borrow_mut().rotate_right();
             });
         }
         {
-            let ui_container_ref = Rc::clone(&ui_container);
+            let robot_ref = Rc::clone(&robot_ui);
             let ui = ui_container.borrow_mut();
             ui.as_ref().unwrap().left_button.connect_clicked(move |_| {
-                let mut ui = ui_container_ref.borrow_mut();
-                ui.as_mut()
-                    .expect("UI is unreachable in the left button callback")
-                    .robot
-                    .rotate_left();
+                robot_ref.borrow_mut().rotate_left();
             });
         }
         {
+            let robot_ref = Rc::clone(&robot_ui);
             let ui_container_ref = Rc::clone(&ui_container);
+            let camera_list_clone = camera_list.unwrap();
             glib::source::timeout_add_local(30, move || {
                 let mut ui = ui_container_ref.borrow_mut();
                 ui.as_mut().map_or_else(
                     || glib::Continue(false),
                     |v| {
-                        v.update_robot_images(Duration::from_millis(10));
+                        for camera_id in &camera_list_clone {
+                            let img = robot_ref.borrow_mut().get_image(*camera_id);
+                            img.map(|mut data| v.update_image(*camera_id, &mut data));
+                        }
                         glib::Continue(true)
                     },
                 )
