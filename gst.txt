@@ -1,0 +1,10 @@
+server:
+gst-launch-1.0 -v v4l2src ! video/x-raw,width=800,height=600 ! jpegenc ! rtpjpegpay ! udpsink host=192.168.88.184 port=5000
+
+address is a target host 
+
+client:
+
+gst-launch-1.0 udpsrc port=5000 ! application/x-rtp,encoding-name=JPEG,payload=26 !  rtpjpegdepay !  jpegdec !  autovideosink
+
+client is lisening on the port where server send to
