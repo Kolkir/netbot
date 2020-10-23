@@ -1,6 +1,8 @@
 import os
 import cv2
 import argparse
+import threading
+import time
 
 from client import Client
 from message import MessageId, HelloMsg, StopMsg
@@ -10,6 +12,22 @@ from move_msg import *
 from camera_prop_msg import *
 
 cameras = dict()
+cameras_locks = dict()
+do_encoding = True
+fps = 30
+stop_event = threading.Event()
+
+
+def image_capture_thread_func(client):
+    done = False
+    while not done:
+        for cam_id in cameras.keys():
+            img, shape = capture_image(cam_id)
+            response = SendImageMsg()
+            response.set_img(cam_id, img, shape[2], shape[1], shape[0])
+            client.send_msg(response)
+            time.sleep(1.0/fps)
+        done = stop_event.is_set()
 
 
 def get_msg_obj(msg_id):
@@ -44,70 +62,83 @@ def get_camera_indices():
                 print('is working\n')
                 arr.append(index)
                 cameras[index] = cap
+                cameras_locks[index] = threading.RLock()
         index += 1
     return arr
 
 
 def get_camera_prop(camera_id):
-    resolutions = [(320, 240), (640, 480), (800, 600), (1024, 768),
-                   (960, 680), (1280, 720), (1440, 720), (1920, 1080)]
-    cap = cameras[camera_id]
-    if cap.isOpened():
-        arr = []
-        for resolution in resolutions:
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, resolution[0])
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, resolution[1])
-            cap.set(cv2.CAP_PROP_FPS, 30)
-            is_captured, frame = cap.read()
-            if is_captured and frame.shape[1] == resolution[0] and frame.shape[0] == resolution[1]:
-                arr.append(resolution[0])
-                arr.append(resolution[1])
-        return arr
-    else:
-        print('Failed to open the camera {}'.format(camera_id))
-    return None
+    lock = cameras_locks[camera_id]
+    with lock:
+        resolutions = [(320, 240), (640, 480), (800, 600), (1024, 768),
+                       (960, 680), (1280, 720), (1440, 720), (1920, 1080)]
+        cap = cameras[camera_id]
+        if cap.isOpened():
+            arr = []
+            for resolution in resolutions:
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, resolution[0])
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, resolution[1])
+                cap.set(cv2.CAP_PROP_FPS, 30)
+                is_captured, frame = cap.read()
+                if is_captured and frame.shape[1] == resolution[0] and frame.shape[0] == resolution[1]:
+                    arr.append(resolution[0])
+                    arr.append(resolution[1])
+            return arr
+        else:
+            print('Failed to open the camera {}'.format(camera_id))
+        return None
 
 
-def set_camera_prop(camera_id, frame_width, frame_height):
-    cam = cameras[camera_id]
-    if cam.isOpened():
-        cam.set(cv2.CAP_PROP_FRAME_WIDTH, frame_width)
-        cam.set(cv2.CAP_PROP_FRAME_HEIGHT, frame_height)
-        cam.set(cv2.CAP_PROP_BACKLIGHT, 0)
-        cam.set(cv2.CAP_PROP_FPS, 30)
-        is_captured, frame = cam.read()
-        if not is_captured:
-            print('Failed to set camera prop with width={} and height={}'.format(
-                frame_width, frame_height))
-    else:
-        print('Failed to open the camera {}'.format(camera_id))
-    return None
+def set_camera_prop(camera_id, frame_width, frame_height, fps, do_image_encoding):
+    lock = cameras_locks[camera_id]
+    with lock:
+        cam = cameras[camera_id]
+        if cam.isOpened():
+            cam.set(cv2.CAP_PROP_FRAME_WIDTH, frame_width)
+            cam.set(cv2.CAP_PROP_FRAME_HEIGHT, frame_height)
+            cam.set(cv2.CAP_PROP_BACKLIGHT, 0)
+            cam.set(cv2.CAP_PROP_FPS, fps)
+            global do_encoding
+            do_encoding = do_image_encoding
+            is_captured, _ = cam.read()
+            if not is_captured:
+                print('Failed to set camera prop with width={} and height={}'.format(
+                    frame_width, frame_height))
+        else:
+            print('Failed to open the camera {}'.format(camera_id))
+        return None
 
 
 def capture_image(camera_id):
-    cam = cameras[camera_id]
-    if cam.isOpened():
-        is_captured, frame = cam.read()
-        if is_captured:
-            # print("Frame was captured: width {} height {}".format(
-            #    frame.shape[1], frame.shape[0]))
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            is_encoded, buffer = cv2.imencode('.png', frame_rgb)
-            if not is_encoded:
-                print('Failed to encode captured frame')
-                return None
-            return buffer, frame_rgb.shape
+    lock = cameras_locks[camera_id]
+    with lock:
+        cam = cameras[camera_id]
+        if cam.isOpened():
+            is_captured, frame = cam.read()
+            if is_captured:
+                # print("Frame was captured: width {} height {}".format(
+                #    frame.shape[1], frame.shape[0]))
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                if do_encoding:
+                    is_encoded, buffer = cv2.imencode('.png', frame_rgb)
+                    if not is_encoded:
+                        print('Failed to encode captured frame')
+                        return None
+                else:
+                    buffer = frame.data
+                return buffer, frame_rgb.shape
+            else:
+                print('Failed to capture an image')
         else:
-            print('Failed to capture an image')
-    else:
-        print('Failed to open the camera {}'.format(camera_id))
-    return None
+            print('Failed to open the camera {}'.format(camera_id))
+        return None
 
 
 def process_set_camera_prop(msg):
     print("Set camera props: camera {} width {} height {}".format(
         msg.camera_id, msg.frame_width, msg.frame_height))
-    set_camera_prop(msg.camera_id, msg.frame_width, msg.frame_height)
+    set_camera_prop(msg.camera_id, msg.frame_width,
+                    msg.frame_height, msg.fps, msg.do_encoding)
 
 
 def process_capture_image(msg):
@@ -130,6 +161,7 @@ def process_camera_prop(msg):
     print("Getting camera prop")
     camera_props = get_camera_prop(msg.camera_id)
     response = SendCameraPropMsg()
+    response.camera_id = msg.camera_id
     response.set_camera_prop(camera_props)
     return response
 
@@ -172,7 +204,19 @@ def main():
         exit(0)
     else:
         client = Client(process_message, get_msg_obj)
-        client.run(host, port)
+        client.init(host, port)
+
+        capture_thread = threading.Thread(
+            target=image_capture_thread_func, args=(client,))
+        capture_thread.start()
+
+        done = False
+        while not done:
+            done = not client.process_recv_message()
+
+        stop_event.set()
+        capture_thread.join()
+        client.close()
 
 
 if __name__ == '__main__':

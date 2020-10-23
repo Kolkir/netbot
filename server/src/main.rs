@@ -84,8 +84,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         let window_ui = WindowUi::new(app, camera_list.as_ref().unwrap(), 640, 480);
         let ui_container = Rc::new(RefCell::new(Some(window_ui)));
         {
+            let robot_ref = Rc::clone(&robot_ui);
             let ui_container_ref = Rc::clone(&ui_container);
             app.connect_shutdown(move |_| {
+                robot_ref
+                    .borrow_mut()
+                    .stop()
+                    .expect("Failed to stop the bot");
                 let ui = ui_container_ref
                     .borrow_mut()
                     .take()

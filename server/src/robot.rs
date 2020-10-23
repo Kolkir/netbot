@@ -24,7 +24,7 @@ type ResolutionsMap = HashMap<u8, Vec<(i32, i32)>>;
 struct ImageProcessor {
     images: HashMap<u8, Mat>,
     scaled_images: HashMap<u8, Mat>,
-    do_encode: bool,
+    do_encoding: bool,
     out_resolution: (i32, i32),
 }
 
@@ -52,11 +52,6 @@ fn recv_thread(
             .expect("Failed to receive message from tcp stream");
         let msg_id = MessageId::from(id);
         match msg_id {
-            MessageId::Hello => {
-                let msg = Box::new(HelloMsg {});
-                println!("Handshake received!");
-                server.send(msg).expect("Failed to send Hello message");
-            }
             MessageId::RecvCameraList => {
                 let mut cam_list_msg = RecvCameraListMsg::new();
                 cam_list_msg.from_bytes(&data);
@@ -100,7 +95,7 @@ impl ImageProcessor {
         Ok(ImageProcessor {
             images: HashMap::new(),
             scaled_images: HashMap::new(),
-            do_encode: true,
+            do_encoding: true,
             out_resolution: (640, 489),
         })
     }
@@ -110,7 +105,7 @@ impl ImageProcessor {
     }
 
     pub fn set_do_encoding(&mut self, do_encoding: bool) {
-        self.do_encode = do_encoding;
+        self.do_encoding = do_encoding;
     }
 
     pub fn get_scaled_image_data(&self, camera_id: u8) -> Option<Vec<u8>> {
@@ -127,14 +122,14 @@ impl ImageProcessor {
     ) -> Result<(), Box<dyn Error>> {
         // println!(
         //     "Recv image : {0} x {1} x {2}",
-        //     recv_msg.channels, recv_msg.frame_width, recv_msg.frame_height
+        //     recv_img_msg.channels, recv_img_msg.frame_width, recv_img_msg.frame_height
         // );
 
         let img_mat = self
             .images
             .entry(recv_img_msg.camera_id)
             .or_insert(Mat::default()?);
-        if self.do_encode {
+        if self.do_encoding {
             let cv_data_vector = core::Vector::<u8>::from(recv_img_msg.data);
             *img_mat = imgcodecs::imdecode(&cv_data_vector, imgcodecs::IMREAD_UNCHANGED)?;
         } else {
@@ -193,6 +188,18 @@ impl Robot {
     pub fn init(&mut self, addr: Ipv4Addr, port: u16) -> Result<(), Box<dyn Error>> {
         self.server.wait_client(addr, port)?;
 
+        let (id, _) = self
+            .server
+            .recv()
+            .expect("Failed to receive message from tcp stream");
+        if MessageId::from(id) == MessageId::Hello {
+            let msg = Box::new(HelloMsg {});
+            println!("Handshake received!");
+            self.server.send(msg).expect("Failed to send Hello message");
+        } else {
+            panic!("Handshake failed");
+        }
+
         let server_recv = self.server.clone();
         let stop_flag = Arc::clone(&self.stop_thread_flag);
         let image_processor_clone = Arc::clone(&self.image_processor);
@@ -212,10 +219,10 @@ impl Robot {
     }
 
     pub fn stop(&mut self) -> Result<(), Box<dyn Error>> {
-        self.server.send(Box::new(StopMsg {}))?;
         self.stop_thread_flag
             .store(true, std::sync::atomic::Ordering::SeqCst);
         self.recv_thread_handle.take().map(thread::JoinHandle::join);
+        self.server.send(Box::new(StopMsg {}))?;
         Ok(())
     }
 
