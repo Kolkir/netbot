@@ -126,10 +126,12 @@ impl ImageProcessor {
         if recv_img_msg.encoded == 1 {
             let cv_data_vector = core::Vector::<u8>::from(recv_img_msg.data);
             *img_mat = imgcodecs::imdecode(&cv_data_vector, imgcodecs::IMREAD_UNCHANGED)?;
-        // TODO: convert BGR to RGB
         } else {
             *img_mat = Mat::from_slice(&recv_img_msg.data)?;
             *img_mat = img_mat.reshape(3, recv_img_msg.frame_height as i32)?;
+            let mut rgb_mat = Mat::default()?;
+            imgproc::cvt_color(img_mat, &mut rgb_mat, imgproc::COLOR_BGR2RGB, 3)?;
+            *img_mat = rgb_mat;
         }
         if img_mat.empty()? {
             panic!("Failed to decode frame");
