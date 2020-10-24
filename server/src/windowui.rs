@@ -22,6 +22,8 @@ pub struct WindowUi {
     ui_frame_width: i32,
     ui_frame_height: i32,
     pub camera_views: HashMap<u8, gtk::Image>,
+    pub camera_res_combos: HashMap<u8, gtk::ComboBox>,
+    pub camera_encoding_checks: HashMap<u8, gtk::CheckButton>,
     pub forward_button: gtk::Button,
     pub backward_button: gtk::Button,
     pub right_button: gtk::Button,
@@ -34,6 +36,7 @@ impl<'a> WindowUi {
     pub fn new(
         application: &gtk::Application,
         camera_list: &Vec<u8>,
+        camera_resolutions: &HashMap<u8, Vec<(i32, i32)>>,
         frame_width: i32,
         frame_height: i32,
     ) -> WindowUi {
@@ -43,6 +46,11 @@ impl<'a> WindowUi {
         let cols_per_camera_view = max_cols_num / camera_num;
 
         let mut camera_views: HashMap<u8, gtk::Image> = HashMap::new();
+        let mut camera_res_combos: HashMap<u8, gtk::ComboBox> = HashMap::new();
+        let mut camera_encoding_checks: HashMap<u8, gtk::CheckButton> = HashMap::new();
+
+        let col_types: [glib::Type; 1] = [glib::Type::String];
+
         for cam_id in camera_list {
             let camera_view = gtk::Image::new();
             camera_view.set_halign(gtk::Align::Center);
@@ -51,6 +59,25 @@ impl<'a> WindowUi {
             camera_view.set_valign(gtk::Align::Center);
             camera_view.set_size_request(frame_width, frame_height);
             camera_views.insert(*cam_id, camera_view);
+
+            let view_model = gtk::ListStore::new(&col_types);
+            for resolution in camera_resolutions.get(cam_id).unwrap() {
+                let label = format!("{0} x {1}", resolution.0, resolution.1);
+                view_model.insert_with_values(None, &[0], &[&label]);
+            }
+            let camera_res_combo = gtk::ComboBox::new();
+            camera_res_combo.set_model(Some(&view_model));
+
+            let cell = gtk::CellRendererText::new();
+            camera_res_combo.pack_start(&cell, false);
+            camera_res_combo.add_attribute(&cell, "text", 0);
+
+            camera_res_combos.insert(*cam_id, camera_res_combo);
+
+            let encoding_check = gtk::CheckButton::new();
+            encoding_check.set_label("encoding");
+            encoding_check.set_halign(gtk::Align::Center);
+            camera_encoding_checks.insert(*cam_id, encoding_check);
         }
 
         let forward_button = gtk::Button::new();
@@ -60,6 +87,7 @@ impl<'a> WindowUi {
         let backward_button = gtk::Button::new();
         backward_button.set_label("backward");
         backward_button.set_halign(gtk::Align::Center);
+
         let right_button = gtk::Button::new();
         right_button.set_label("right");
         right_button.set_halign(gtk::Align::Center);
@@ -81,12 +109,26 @@ impl<'a> WindowUi {
                 cols_per_camera_view as i32,
                 1,
             );
+            container.attach(
+                camera_res_combos.get(&key).unwrap(),
+                (i * cols_per_camera_view) as i32,
+                1,
+                cols_per_camera_view as i32,
+                1,
+            );
+            container.attach(
+                camera_encoding_checks.get(&key).unwrap(),
+                (i * cols_per_camera_view) as i32,
+                2,
+                cols_per_camera_view as i32,
+                1,
+            );
         }
 
-        container.attach(&forward_button, 0, 1, 1, 1);
-        container.attach(&backward_button, 1, 1, 1, 1);
-        container.attach(&right_button, 2, 1, 1, 1);
-        container.attach(&left_button, 3, 1, 1, 1);
+        container.attach(&forward_button, 0, 3, 1, 1);
+        container.attach(&backward_button, 1, 3, 1, 1);
+        container.attach(&right_button, 2, 3, 1, 1);
+        container.attach(&left_button, 3, 3, 1, 1);
 
         let window = gtk::ApplicationWindow::new(application);
         window.set_icon_name(Some("package-x-generic"));
@@ -101,6 +143,8 @@ impl<'a> WindowUi {
             ui_frame_width: frame_width,
             ui_frame_height: frame_height,
             camera_views: camera_views,
+            camera_res_combos: camera_res_combos,
+            camera_encoding_checks: camera_encoding_checks,
             forward_button: forward_button,
             backward_button: backward_button,
             right_button: right_button,

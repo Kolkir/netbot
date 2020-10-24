@@ -61,14 +61,21 @@ fn main() -> Result<(), Box<dyn Error>> {
         for camera_id in camera_list.as_ref().unwrap() {
             robot.borrow_mut().ask_camera_prop(*camera_id)?;
         }
-        for camera_id in camera_list.as_ref().unwrap() {
-            if robot
-                .borrow_mut()
-                .get_camera_resolutions(*camera_id)
-                .is_none()
-            {
-                thread::sleep(Duration::from_millis(100));
-            } else {
+
+        let mut cam_num: usize = 0;
+        loop {
+            for camera_id in camera_list.as_ref().unwrap() {
+                if robot
+                    .borrow_mut()
+                    .get_camera_resolutions(*camera_id)
+                    .is_none()
+                {
+                    thread::sleep(Duration::from_millis(100));
+                } else {
+                    cam_num += 1;
+                }
+            }
+            if cam_num == camera_list.as_ref().unwrap().len() {
                 break;
             }
         }
@@ -81,8 +88,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     let robot_ui = Rc::clone(&robot);
     application.connect_startup(move |app| {
         let camera_list = robot_ui.borrow_mut().get_camera_list();
-        let window_ui = WindowUi::new(app, camera_list.as_ref().unwrap(), 640, 480);
+        let cameras_resolutions = robot_ui.borrow_mut().get_cameras_resolutions();
+        let window_ui = WindowUi::new(
+            app,
+            camera_list.as_ref().unwrap(),
+            &cameras_resolutions,
+            640,
+            480,
+        );
         let ui_container = Rc::new(RefCell::new(Some(window_ui)));
+
         {
             let robot_ref = Rc::clone(&robot_ui);
             let ui_container_ref = Rc::clone(&ui_container);
@@ -97,6 +112,74 @@ fn main() -> Result<(), Box<dyn Error>> {
                     .expect("Shutdown called multiple times");
                 drop(ui);
             });
+        }
+
+        {
+            use crate::gtk::ToggleButtonExt;
+            let ui = ui_container.borrow_mut();
+            for check_btn in &ui.as_ref().unwrap().camera_encoding_checks {
+                let robot_ref = Rc::clone(&robot_ui);
+                let cam_id = *check_btn.0;
+                check_btn.1.connect_clicked(move |btn| {
+                    robot_ref
+                        .borrow_mut()
+                        .ask_set_camera_prop(cam_id, 0, 0, 0, btn.get_active())
+                        .expect("Failed to set camera prop");
+                });
+            }
+        }
+
+        {
+            use crate::gtk::ComboBoxExt;
+            use crate::gtk::ToggleButtonExt;
+            use crate::gtk::TreeModelExt;
+            let ui = ui_container.borrow_mut();
+            for res_combo in &ui.as_ref().unwrap().camera_res_combos {
+                let robot_ref = Rc::clone(&robot_ui);
+                let ui_container_ref = Rc::clone(&ui_container);
+                let cam_id = *res_combo.0;
+                res_combo.1.connect_changed(move |combo| {
+                    let ui = ui_container_ref.borrow_mut();
+                    let encoded = ui
+                        .as_ref()
+                        .unwrap()
+                        .camera_encoding_checks
+                        .get(&cam_id)
+                        .as_ref()
+                        .unwrap()
+                        .get_active();
+                    let model = combo.get_model().unwrap();
+                    let iter = combo.get_active_iter();
+                    match iter {
+                        Some(tree_iter) => {
+                            let res_val = model
+                                .get_value(&tree_iter, 0)
+                                .get::<String>()
+                                .expect("Failed to get resolution in UI");
+                            res_val.map(|res_str| {
+                                let mut split = res_str.split("x");
+                                let width = split
+                                    .next()
+                                    .unwrap()
+                                    .trim()
+                                    .parse::<u16>()
+                                    .expect("Failed to get resolution width in UI");
+                                let height = split
+                                    .next()
+                                    .unwrap()
+                                    .trim()
+                                    .parse::<u16>()
+                                    .expect("Failed to get resolution height in UI");
+                                robot_ref
+                                    .borrow_mut()
+                                    .ask_set_camera_prop(cam_id, width, height, 0, encoded)
+                                    .expect("Failed to set camera prop");
+                            });
+                        }
+                        None => (),
+                    }
+                });
+            }
         }
 
         use crate::gtk::ButtonExt;

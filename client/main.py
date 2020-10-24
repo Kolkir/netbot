@@ -13,7 +13,7 @@ from camera_prop_msg import *
 
 cameras = dict()
 cameras_locks = dict()
-do_encoding = True
+cameras_encoding = dict()
 fps = 30
 stop_event = threading.Event()
 
@@ -22,9 +22,10 @@ def image_capture_thread_func(client):
     done = False
     while not done:
         for cam_id in cameras.keys():
-            img, shape = capture_image(cam_id)
+            img, shape, encoded = capture_image(cam_id)
             response = SendImageMsg()
-            response.set_img(cam_id, img, shape[2], shape[1], shape[0])
+            response.set_img(
+                cam_id, img, shape[2], shape[1], shape[0],  encoded)
             client.send_msg(response)
             time.sleep(1.0/fps)
         done = stop_event.is_set()
@@ -63,6 +64,7 @@ def get_camera_indices():
                 arr.append(index)
                 cameras[index] = cap
                 cameras_locks[index] = threading.RLock()
+                cameras_encoding[index] = False
         index += 1
     return arr
 
@@ -89,17 +91,19 @@ def get_camera_prop(camera_id):
         return None
 
 
-def set_camera_prop(camera_id, frame_width, frame_height, fps, do_image_encoding):
+def set_camera_prop(camera_id, frame_width, frame_height, fps, do_encoding):
     lock = cameras_locks[camera_id]
     with lock:
         cam = cameras[camera_id]
         if cam.isOpened():
-            cam.set(cv2.CAP_PROP_FRAME_WIDTH, frame_width)
-            cam.set(cv2.CAP_PROP_FRAME_HEIGHT, frame_height)
+            if frame_width != 0:
+                cam.set(cv2.CAP_PROP_FRAME_WIDTH, frame_width)
+            if frame_height != 0:
+                cam.set(cv2.CAP_PROP_FRAME_HEIGHT, frame_height)
             cam.set(cv2.CAP_PROP_BACKLIGHT, 0)
-            cam.set(cv2.CAP_PROP_FPS, fps)
-            global do_encoding
-            do_encoding = do_image_encoding
+            if fps != 0:
+                cam.set(cv2.CAP_PROP_FPS, fps)
+            cameras_encoding[camera_id] = do_encoding
             is_captured, _ = cam.read()
             if not is_captured:
                 print('Failed to set camera prop with width={} and height={}'.format(
@@ -119,6 +123,7 @@ def capture_image(camera_id):
                 # print("Frame was captured: width {} height {}".format(
                 #    frame.shape[1], frame.shape[0]))
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                do_encoding = cameras_encoding[camera_id]
                 if do_encoding:
                     is_encoded, buffer = cv2.imencode('.png', frame_rgb)
                     if not is_encoded:
@@ -126,7 +131,7 @@ def capture_image(camera_id):
                         return None
                 else:
                     buffer = frame.data
-                return buffer, frame_rgb.shape
+                return buffer, frame_rgb.shape, do_encoding
             else:
                 print('Failed to capture an image')
         else:
@@ -135,17 +140,17 @@ def capture_image(camera_id):
 
 
 def process_set_camera_prop(msg):
-    print("Set camera props: camera {} width {} height {}".format(
-        msg.camera_id, msg.frame_width, msg.frame_height))
+    print("Set camera props: camera {} width {} height {} encoded {}".format(
+        msg.camera_id, msg.frame_width, msg.frame_height, msg.do_encoding))
     set_camera_prop(msg.camera_id, msg.frame_width,
                     msg.frame_height, msg.fps, msg.do_encoding)
 
 
 def process_capture_image(msg):
     # print("Capturing image: camera {}")
-    img, shape = capture_image(msg.camera_id)
+    img, shape, encoded = capture_image(msg.camera_id)
     response = SendImageMsg()
-    response.set_img(msg.camera_id, img, shape[2], shape[1], shape[0])
+    response.set_img(msg.camera_id, img, shape[2], shape[1], shape[0], encoded)
     return response
 
 

@@ -24,7 +24,6 @@ type ResolutionsMap = HashMap<u8, Vec<(i32, i32)>>;
 struct ImageProcessor {
     images: HashMap<u8, Mat>,
     scaled_images: HashMap<u8, Mat>,
-    do_encoding: bool,
     out_resolution: (i32, i32),
 }
 
@@ -95,17 +94,12 @@ impl ImageProcessor {
         Ok(ImageProcessor {
             images: HashMap::new(),
             scaled_images: HashMap::new(),
-            do_encoding: true,
             out_resolution: (640, 489),
         })
     }
 
     pub fn set_out_resolution(&mut self, width: i32, height: i32) {
         self.out_resolution = (width, height);
-    }
-
-    pub fn set_do_encoding(&mut self, do_encoding: bool) {
-        self.do_encoding = do_encoding;
     }
 
     pub fn get_scaled_image_data(&self, camera_id: u8) -> Option<Vec<u8>> {
@@ -129,9 +123,10 @@ impl ImageProcessor {
             .images
             .entry(recv_img_msg.camera_id)
             .or_insert(Mat::default()?);
-        if self.do_encoding {
+        if recv_img_msg.encoded == 1 {
             let cv_data_vector = core::Vector::<u8>::from(recv_img_msg.data);
             *img_mat = imgcodecs::imdecode(&cv_data_vector, imgcodecs::IMREAD_UNCHANGED)?;
+        // TODO: convert BGR to RGB
         } else {
             *img_mat = Mat::from_slice(&recv_img_msg.data)?;
             *img_mat = img_mat.reshape(3, recv_img_msg.frame_height as i32)?;
@@ -258,7 +253,6 @@ impl Robot {
         set_msg.frame_height = frame_height;
         set_msg.fps = fps;
         set_msg.encode = if do_encode { 1 } else { 0 };
-        self.set_do_encoding(do_encode);
         self.server.send(Box::new(set_msg))?;
         Ok(())
     }
@@ -297,13 +291,6 @@ impl Robot {
             .set_out_resolution(width, height);
     }
 
-    fn set_do_encoding(&mut self, do_encode: bool) {
-        self.image_processor
-            .lock()
-            .unwrap()
-            .set_do_encoding(do_encode);
-    }
-
     pub fn get_camera_resolutions(&self, camera_id: u8) -> Option<Vec<(i32, i32)>> {
         let cam_res_guard = self.camera_resolutions.lock();
         let resolutions = cam_res_guard.as_ref().unwrap().get(&camera_id);
@@ -311,6 +298,11 @@ impl Robot {
             Some(res) => Some(res.clone()),
             None => None,
         }
+    }
+
+    pub fn get_cameras_resolutions(&self) -> ResolutionsMap {
+        let cam_res_guard = self.camera_resolutions.lock();
+        cam_res_guard.unwrap().clone()
     }
 
     pub fn get_camera_list(&self) -> Option<Vec<u8>> {
