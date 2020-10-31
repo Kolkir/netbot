@@ -23,7 +23,7 @@ mod robot;
 mod server;
 
 use robot::Robot;
-use std::cell::RefCell;
+use std::cell::{RefCell, RefMut};
 use std::error::Error;
 use std::net::Ipv4Addr;
 use std::rc::Rc;
@@ -98,6 +98,22 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
         let ui_container = Rc::new(RefCell::new(Some(window_ui)));
 
+        connect_robot_moving(&robot_ui, &ui_container, gdk::keys::constants::Up, |r| {
+            r.move_forward()
+        });
+
+        connect_robot_moving(&robot_ui, &ui_container, gdk::keys::constants::Down, |r| {
+            r.move_backward()
+        });
+
+        connect_robot_moving(&robot_ui, &ui_container, gdk::keys::constants::Left, |r| {
+            r.rotate_left()
+        });
+
+        connect_robot_moving(&robot_ui, &ui_container, gdk::keys::constants::Right, |r| {
+            r.rotate_right()
+        });
+
         {
             let robot_ref = Rc::clone(&robot_ui);
             let ui_container_ref = Rc::clone(&ui_container);
@@ -115,6 +131,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
 
         {
+            use crate::gtk::ButtonExt;
             use crate::gtk::ToggleButtonExt;
             let ui = ui_container.borrow_mut();
             for check_btn in &ui.as_ref().unwrap().camera_encoding_checks {
@@ -182,41 +199,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         }
 
-        use crate::gtk::ButtonExt;
-        {
-            let robot_ref = Rc::clone(&robot_ui);
-            let ui = ui_container.borrow_mut();
-            ui.as_ref()
-                .unwrap()
-                .forward_button
-                .connect_clicked(move |_| {
-                    robot_ref.borrow_mut().move_forward();
-                });
-        }
-        {
-            let robot_ref = Rc::clone(&robot_ui);
-            let ui = ui_container.borrow_mut();
-            ui.as_ref()
-                .unwrap()
-                .backward_button
-                .connect_clicked(move |_| {
-                    robot_ref.borrow_mut().move_backward();
-                });
-        }
-        {
-            let robot_ref = Rc::clone(&robot_ui);
-            let ui = ui_container.borrow_mut();
-            ui.as_ref().unwrap().right_button.connect_clicked(move |_| {
-                robot_ref.borrow_mut().rotate_right();
-            });
-        }
-        {
-            let robot_ref = Rc::clone(&robot_ui);
-            let ui = ui_container.borrow_mut();
-            ui.as_ref().unwrap().left_button.connect_clicked(move |_| {
-                robot_ref.borrow_mut().rotate_left();
-            });
-        }
         {
             let robot_ref = Rc::clone(&robot_ui);
             let ui_container_ref = Rc::clone(&ui_container);
@@ -240,4 +222,55 @@ fn main() -> Result<(), Box<dyn Error>> {
     // application.run(&std::env::args().collect::<Vec<_>>());
     application.run(&[]);
     Ok(())
+}
+
+fn connect_robot_moving<MoveFunc: 'static>(
+    robot: &Rc<RefCell<Robot>>,
+    ui_container: &Rc<RefCell<Option<WindowUi>>>,
+    target_key: gdk::keys::Key,
+    func: MoveFunc,
+) where
+    MoveFunc: Fn(&mut Robot),
+{
+    use crate::gtk::WidgetExt;
+    let robot_move_ref = Rc::clone(robot);
+    let ui_move_ref = Rc::clone(ui_container);
+    let ui = ui_container.borrow_mut();
+    let stop_target_key = target_key.clone();
+    ui.as_ref()
+        .unwrap()
+        .window
+        .connect_key_press_event(move |_, key| {
+            let key_val = key.get_keyval();
+            if key_val == target_key {
+                ui_move_ref
+                    .borrow_mut()
+                    .as_mut()
+                    .unwrap()
+                    .disable_comboboxes();
+                let r_ref = robot_move_ref.borrow_mut();
+                RefMut::map(r_ref, |r| {
+                    func(r);
+                    r
+                });
+            }
+            gtk::Inhibit(false)
+        });
+    let robot_stop_ref = Rc::clone(&robot);
+    let ui_stop_ref = Rc::clone(&ui_container);
+    ui.as_ref()
+        .unwrap()
+        .window
+        .connect_key_release_event(move |_, key| {
+            let key_val = key.get_keyval();
+            if key_val == stop_target_key {
+                robot_stop_ref.borrow_mut().stop_moving();
+                ui_stop_ref
+                    .borrow_mut()
+                    .as_mut()
+                    .unwrap()
+                    .enable_comboboxes();
+            }
+            gtk::Inhibit(false)
+        });
 }

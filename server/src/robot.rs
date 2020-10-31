@@ -35,6 +35,7 @@ pub struct Robot {
     server: Server,
     recv_thread_handle: Option<thread::JoinHandle<()>>,
     stop_thread_flag: Arc<AtomicBool>,
+    bot_is_moving: bool,
 }
 
 fn recv_thread(
@@ -179,6 +180,7 @@ impl Robot {
             server: Server::new(),
             recv_thread_handle: None,
             stop_thread_flag: Arc::new(AtomicBool::new(false)),
+            bot_is_moving: false,
         })
     }
 
@@ -268,22 +270,38 @@ impl Robot {
         self.server
             .send(Box::new(move_msg))
             .expect("Failed to send move command");
+        self.bot_is_moving = true;
     }
 
     pub fn rotate_left(&mut self) {
-        self.ask_move_bot(0, 0, self.move_speed, 1);
+        if !self.bot_is_moving {
+            self.ask_move_bot(0, 0, self.move_speed, 1);
+        }
     }
 
     pub fn rotate_right(&mut self) {
-        self.ask_move_bot(self.move_speed, 1, 0, 0);
+        if !self.bot_is_moving {
+            self.ask_move_bot(self.move_speed, 1, 0, 0);
+        }
     }
 
     pub fn move_forward(&mut self) {
-        self.ask_move_bot(self.move_speed, 1, self.move_speed, 1);
+        if !self.bot_is_moving {
+            self.ask_move_bot(self.move_speed, 1, self.move_speed, 1);
+        }
     }
 
     pub fn move_backward(&mut self) {
-        self.ask_move_bot(self.move_speed, 0, self.move_speed, 0);
+        if !self.bot_is_moving {
+            self.ask_move_bot(self.move_speed, 0, self.move_speed, 0);
+        }
+    }
+
+    pub fn stop_moving(&mut self) {
+        if self.bot_is_moving {
+            self.ask_move_bot(0, 0, 0, 0);
+            self.bot_is_moving = false;
+        }
     }
 
     pub fn set_out_resolution(&mut self, width: i32, height: i32) {

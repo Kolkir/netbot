@@ -24,10 +24,6 @@ pub struct WindowUi {
     pub camera_views: HashMap<u8, gtk::Image>,
     pub camera_res_combos: HashMap<u8, gtk::ComboBox>,
     pub camera_encoding_checks: HashMap<u8, gtk::CheckButton>,
-    pub forward_button: gtk::Button,
-    pub backward_button: gtk::Button,
-    pub right_button: gtk::Button,
-    pub left_button: gtk::Button,
     container: gtk::Grid,
     pub window: gtk::ApplicationWindow,
 }
@@ -80,22 +76,6 @@ impl<'a> WindowUi {
             camera_encoding_checks.insert(*cam_id, encoding_check);
         }
 
-        let forward_button = gtk::Button::new();
-        forward_button.set_label("forward");
-        forward_button.set_halign(gtk::Align::Center);
-
-        let backward_button = gtk::Button::new();
-        backward_button.set_label("backward");
-        backward_button.set_halign(gtk::Align::Center);
-
-        let right_button = gtk::Button::new();
-        right_button.set_label("right");
-        right_button.set_halign(gtk::Align::Center);
-
-        let left_button = gtk::Button::new();
-        left_button.set_label("left");
-        left_button.set_halign(gtk::Align::Center);
-
         let container = gtk::Grid::new();
         container.set_vexpand(true);
         container.set_hexpand(true);
@@ -125,11 +105,6 @@ impl<'a> WindowUi {
             );
         }
 
-        container.attach(&forward_button, 0, 3, 1, 1);
-        container.attach(&backward_button, 1, 3, 1, 1);
-        container.attach(&right_button, 2, 3, 1, 1);
-        container.attach(&left_button, 3, 3, 1, 1);
-
         let window = gtk::ApplicationWindow::new(application);
         window.set_icon_name(Some("package-x-generic"));
         window.set_property_window_position(gtk::WindowPosition::Center);
@@ -145,12 +120,20 @@ impl<'a> WindowUi {
             camera_views: camera_views,
             camera_res_combos: camera_res_combos,
             camera_encoding_checks: camera_encoding_checks,
-            forward_button: forward_button,
-            backward_button: backward_button,
-            right_button: right_button,
-            left_button: left_button,
             container: container,
             window: window,
+        }
+    }
+
+    pub fn disable_comboboxes(&mut self) {
+        for (_, combo) in &self.camera_res_combos {
+            combo.set_button_sensitivity(gtk::SensitivityType::Off);
+        }
+    }
+
+    pub fn enable_comboboxes(&mut self) {
+        for (_, combo) in &self.camera_res_combos {
+            combo.set_button_sensitivity(gtk::SensitivityType::On);
         }
     }
 
