@@ -11,6 +11,8 @@ from image_msg import *
 from move_msg import *
 from camera_prop_msg import *
 
+from chassis import Chassis
+
 cameras = dict()
 cameras_locks = dict()
 cameras_encoding = dict()
@@ -171,9 +173,22 @@ def process_camera_prop(msg):
     return response
 
 
-def process_move(msg):
+def process_move(chassis, msg):
     print("Moving left {}:{} right {}:{}".format(
         msg.left_speed, msg.left_dir, msg.right_speed, msg.right_dir))
+    if msg.left_dir == 1 and msg.left_speed > 0:
+        chassis.start_left_wheel_rotation()
+    elif msg.left_dir == 0 and msg.left_speed > 0:
+        chassis.start_left_wheel_rotation()
+    elif msg.right_dir == 1 and msg.right_speed > 0:
+        chassis.start_right_wheel_rotation()
+    elif msg.right_dir == 0 and msg.right_speed > 0:
+        chassis.start_right_wheel_rotation()
+
+    if msg.left_speed == 0:
+        chassis.stop_left_wheel_rotation()
+    if msg.right_speed == 0:
+        chassis.stop_right_wheel_rotation()
 
 
 def process_stop(msg):
@@ -183,12 +198,12 @@ def process_stop(msg):
     return StopMsg()
 
 
-def process_message(msg):
+def process_message(msg, args):
     # print("Processing msg id : {}".format(msg.id()))
     result = {
         MessageId.CAPTURE_IMAGE: process_capture_image,
         MessageId.GET_CAMERA_LIST: process_get_camera_list,
-        MessageId.MOVE: process_move,
+        MessageId.MOVE: lambda msg: process_move(args, msg),
         MessageId.GET_CAMERA_PROP: process_camera_prop,
         MessageId.STOP: process_stop,
         MessageId.SET_CAMERA_PROP: process_set_camera_prop,
@@ -208,7 +223,10 @@ def main():
         print(parser.usage)
         exit(0)
     else:
-        client = Client(process_message, get_msg_obj)
+        chassis = Chassis()
+        chassis.activate()
+
+        client = Client(lambda msg: process_message(msg, chassis), get_msg_obj)
         client.init(host, port)
 
         capture_thread = threading.Thread(
@@ -219,6 +237,7 @@ def main():
         while not done:
             done = not client.process_recv_message()
 
+        chassis.dectivate()
         stop_event.set()
         capture_thread.join()
         client.close()

@@ -275,13 +275,13 @@ impl Robot {
 
     pub fn rotate_left(&mut self) {
         if !self.bot_is_moving {
-            self.ask_move_bot(0, 0, self.move_speed, 1);
+            self.ask_move_bot(self.move_speed, 1, 0, 0);
         }
     }
 
     pub fn rotate_right(&mut self) {
         if !self.bot_is_moving {
-            self.ask_move_bot(self.move_speed, 1, 0, 0);
+            self.ask_move_bot(0, 0, self.move_speed, 1);
         }
     }
 
