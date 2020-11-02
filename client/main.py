@@ -14,6 +14,7 @@ from camera_prop_msg import *
 from chassis import Chassis
 
 cameras = dict()
+cameras_dict_lock = threading.RLock()
 cameras_locks = dict()
 cameras_encoding = dict()
 fps = 30
@@ -23,7 +24,10 @@ stop_event = threading.Event()
 def image_capture_thread_func(client):
     done = False
     while not done:
-        for cam_id in cameras.keys():
+        with cameras_dict_lock:
+            cam_ids = cameras.keys()
+
+        for cam_id in cam_ids:
             img, shape, encoded = capture_image(cam_id)
             response = SendImageMsg()
             response.set_img(
@@ -64,9 +68,10 @@ def get_camera_indices():
             if (frame[0]):
                 print('is working\n')
                 arr.append(index)
-                cameras[index] = cap
-                cameras_locks[index] = threading.RLock()
-                cameras_encoding[index] = False
+                with cameras_dict_lock:
+                    cameras[index] = cap
+                    cameras_locks[index] = threading.RLock()
+                    cameras_encoding[index] = False
         index += 1
     return arr
 
