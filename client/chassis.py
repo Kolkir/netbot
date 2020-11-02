@@ -21,6 +21,8 @@ def rotate_wheels_thread_func(platform):
 
 class Chassis:
     def __init__(self):
+        self.left_control_pins = [3, 5, 7, 16]
+        self.right_control_pins = [15, 19, 21, 23]
         self.left_control_pins = [12, 11, 6, 1]
         self.right_control_pins = [3, 15, 16, 14]
         self.halfstep_seq = [
