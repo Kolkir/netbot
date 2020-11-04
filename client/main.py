@@ -181,19 +181,7 @@ def process_camera_prop(msg):
 def process_move(chassis, msg):
     print("Moving left {}:{} right {}:{}".format(
         msg.left_speed, msg.left_dir, msg.right_speed, msg.right_dir))
-    if msg.left_dir == 1 and msg.left_speed > 0:
-        chassis.start_left_wheel_rotation()
-    elif msg.left_dir == 0 and msg.left_speed > 0:
-        chassis.start_left_wheel_rotation()
-    elif msg.right_dir == 1 and msg.right_speed > 0:
-        chassis.start_right_wheel_rotation()
-    elif msg.right_dir == 0 and msg.right_speed > 0:
-        chassis.start_right_wheel_rotation()
-
-    if msg.left_speed == 0:
-        chassis.stop_left_wheel_rotation()
-    if msg.right_speed == 0:
-        chassis.stop_right_wheel_rotation()
+    chassis.move(msg)
 
 
 def process_stop(msg):
