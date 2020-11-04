@@ -13,16 +13,16 @@ def init_control_pins(control_pins):
 
 
 def rotate_wheels_process_func(events):
-    sys.stdout = open(str(os.getpid()) + ".out", "a")
-    sys.stderr = open(str(os.getpid()) + "_error.out", "a")
-    print('Chassis init')
+    # sys.stdout = open(str(os.getpid()) + ".out", "a")
+    # sys.stderr = open(str(os.getpid()) + "_error.out", "a")
+    # print('Chassis init')
     chassis = ChassisProcess(events)
     while chassis.is_active():
         chassis.update_wheels_config()
         chassis.rotate_wheels()
         time.sleep(0.001)
     chassis.dectivate()
-    print("Chassis deactivated")
+    # print("Chassis deactivated")
 
 
 class ChassisProcess:
@@ -76,7 +76,6 @@ class ChassisProcess:
             self.right_wheel_enabled = False
 
     def rotate_wheels(self):
-        print("moving")
         control_pins = []
         pins_values = []
 
@@ -84,7 +83,7 @@ class ChassisProcess:
             control_pins += self.left_control_pins
             for pin in range(4):
                 pins_values.append(
-                    self.left_halfstep_seq[self.right_step_index][pin])
+                    self.left_halfstep_seq[self.left_step_index][pin])
             self.left_step_index += 1
             if self.left_step_index > 7:
                 self.left_step_index = 0
@@ -98,8 +97,10 @@ class ChassisProcess:
             if self.right_step_index > 7:
                 self.right_step_index = 0
 
-        if is_arm_platform and len(control_pins) > 0:
-            GPIO.output(control_pins, pins_values)
+        if len(control_pins) > 0:
+            # print("{} - {}".format(control_pins, pins_values))
+            if is_arm_platform and len(control_pins) > 0:
+                GPIO.output(control_pins, pins_values)
 
     def rotate_right_motor(self):
         if is_arm_platform:
