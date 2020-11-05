@@ -8,8 +8,7 @@ if is_arm_platform:
 
 
 def init_control_pins(control_pins):
-    GPIO.setup(control_pins, GPIO.OUT)
-    GPIO.output(control_pins, 0)
+    GPIO.setup(control_pins, GPIO.OUT, initial=GPIO.LOW)
 
 
 def rotate_wheels_process_func(events):
@@ -20,7 +19,6 @@ def rotate_wheels_process_func(events):
     while chassis.is_active():
         chassis.update_wheels_config()
         chassis.rotate_wheels()
-        time.sleep(0.001)
     chassis.dectivate()
     # print("Chassis deactivated")
 
@@ -44,6 +42,9 @@ class ChassisProcess:
         self.left_step_index = 0
         self.left_wheel_enabled = False
         self.right_wheel_enabled = False
+
+        self.out_pins = [0,0]
+        self.out_values = [0,0]
 
         if is_arm_platform:
             # GPIO.setboard(GPIO.ZEROPLUS)
@@ -76,31 +77,25 @@ class ChassisProcess:
             self.right_wheel_enabled = False
 
     def rotate_wheels(self):
-        control_pins = []
-        pins_values = []
-
-        if self.left_wheel_enabled:
-            control_pins += self.left_control_pins
+        for halfstep in range(8):
             for pin in range(4):
-                pins_values.append(
-                    self.left_halfstep_seq[self.left_step_index][pin])
-            self.left_step_index += 1
-            if self.left_step_index > 7:
-                self.left_step_index = 0
+                self.out_pins[0] = self.left_control_pins[pin] 
+                self.out_pins[1] = self.right_control_pins[pin] 
+                
+                if self.left_wheel_enabled:
+                    self.out_values[0] = self.left_halfstep_seq[halfstep][pin]
+                else:
+                    self.out_values[0] = GPIO.LOW
 
-        if self.right_wheel_enabled:
-            control_pins += self.right_control_pins
-            for pin in range(4):
-                pins_values.append(
-                    self.right_halfstep_seq[self.right_step_index][pin])
-            self.right_step_index += 1
-            if self.right_step_index > 7:
-                self.right_step_index = 0
-
-        if len(control_pins) > 0:
-            # print("{} - {}".format(control_pins, pins_values))
-            if is_arm_platform and len(control_pins) > 0:
-                GPIO.output(control_pins, pins_values)
+                if self.right_wheel_enabled:
+                    self.out_values[1] = self.right_halfstep_seq[halfstep][pin]
+                else:
+                    self.out_values[1] = GPIO.LOW 
+    #                print('{} - {}', self.out_pins, self.out_values)
+                if is_arm_platform:
+                    GPIO.output(self.out_pins[0], self.out_values[0])
+                    GPIO.output(self.out_pins[1], self.out_values[1])
+            #time.sleep(0.01)
 
     def rotate_right_motor(self):
         if is_arm_platform:

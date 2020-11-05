@@ -186,8 +186,6 @@ def process_move(chassis, msg):
 
 def process_stop(msg):
     print('Stopping...')
-    for _, cam in cameras.items():
-        cam.release()
     return StopMsg()
 
 
@@ -233,6 +231,8 @@ def main():
         chassis.dectivate()
         stop_event.set()
         capture_thread.join()
+        for _, cam in cameras.items():
+            cam.release()
         client.close()
 
 

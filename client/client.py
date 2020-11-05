@@ -11,18 +11,20 @@ class Client:
         self.get_message_obj = get_message_obj_func
         self.socket = None
         self.guard = RLock()
+        self.is_closed = True
 
     def send_msg(self, msg):
         with self.guard:
             # send header
-            header = bytearray()
-            header.extend(msg.id().to_bytes(1, byteorder="big"))
-            header.extend(msg.size().to_bytes(4, byteorder="big"))
-            self.socket.sendall(header)
-            # send body
-            bytes = msg.to_bytes()
-            if bytes:
-                self.socket.sendall(bytes)
+            if not self.is_closed:
+                header = bytearray()
+                header.extend(msg.id().to_bytes(1, byteorder="big"))
+                header.extend(msg.size().to_bytes(4, byteorder="big"))
+                self.socket.sendall(header)
+                # send body
+                bytes = msg.to_bytes()
+                if bytes:
+                    self.socket.sendall(bytes)
 
     def recv_msg(self):
         # recv header`
@@ -36,11 +38,16 @@ class Client:
         return msg
 
     def close(self):
-        self.socket.close()
+        with self.guard:
+            self.socket.close()
+            self.is_closed = True
+
 
     def init(self, host, port):
         self.socket = sock.socket(sock.AF_INET, sock.SOCK_STREAM)
         self.socket.connect((host, port))
+        self.is_closed = False 
+
         # handshakes
         hello_msg = HelloMsg()
         self.send_msg(hello_msg)
